@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>가상거래소 — 뉴스가 시세가 된다</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="ticker-wrap" id="tickerWrap" aria-label="세계 수신">
+  <div class="ticker-label">세계 수신</div>
+  <div class="ticker-track" id="tickerTrack">
+    <span class="ticker-empty">시장이 개장했습니다. 소식통에서 첫 뉴스를 발행해보세요.</span>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">V</span>
+    <span class="brand-name">가상거래소</span>
+  </div>
+  <div class="topbar-stats">
+    <div class="tstat">
+      <span class="tstat-label">NOSPI</span>
+      <span class="tstat-value mono" id="nospiValue">700.00</span>
+      <span class="tstat-change mono" id="nospiChange">+0.00%</span>
+    </div>
+    <div class="tstat">
+      <span class="tstat-label">USD/KRW</span>
+      <span class="tstat-value mono" id="usdkrwValue">1,380.0</span>
+    </div>
+    <div class="tstat">
+      <span class="tstat-label">투자자</span>
+      <span class="tstat-value mono" id="investorValue">100,000</span>
+    </div>
+    <div class="tstat">
+      <span class="tstat-label" id="clockLabel">시각</span>
+      <span class="tstat-value mono" id="clockValue">--:--</span>
+    </div>
+    <div class="tstat">
+      <span class="status-pill" id="statusPill">● 장중</span>
+      <span class="tstat-countdown mono" id="statusCountdown">—</span>
+    </div>
+    <button class="btn-admin" id="btnAdmin">관리자</button>
+  </div>
+</header>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <h2>상장 기업</h2>
+      <button class="btn-mini" id="btnNewCompany">+ 신규</button>
+    </div>
+    <div class="company-list" id="companyList"></div>
+  </aside>
+
+  <main class="chart-col">
+    <div class="chart-head">
+      <div class="chart-title">
+        <h1 id="selName">—</h1>
+        <span class="ticker-badge" id="selTicker">—</span>
+        <span class="tag-pill" id="selTag">—</span>
+      </div>
+      <div class="chart-price">
+        <span class="mono price-big" id="selPrice">—</span>
+        <span class="mono price-change" id="selChange">—</span>
+      </div>
+    </div>
+
+    <div class="chart-tools">
+      <button class="tool-btn is-active" data-tool="cursor">커서</button>
+      <button class="tool-btn" data-tool="trend">추세선</button>
+      <button class="tool-btn" data-tool="horizontal">수평선</button>
+      <button class="tool-btn" id="btnClearDraw">전체 지우기</button>
+      <button class="tool-btn" id="btnEditCompany">기업 수정</button>
+    </div>
+
+    <div class="chart-frame">
+      <canvas id="candleCanvas" class="candle-canvas"></canvas>
+    </div>
+    <canvas id="volumeCanvas" class="volume-canvas"></canvas>
+
+    <div class="trade-panel">
+      <label class="field">
+        <span>수량</span>
+        <input type="number" id="tradeQty" min="1" step="1" value="10" inputmode="numeric">
+      </label>
+      <label class="field">
+        <span>레버리지</span>
+        <select id="tradeLev">
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+          <option value="3" selected>3x</option>
+          <option value="5">5x</option>
+          <option value="10">10x</option>
+          <option value="20">20x</option>
+        </select>
+      </label>
+      <div class="field">
+        <span>필요 증거금</span>
+        <span class="mono" id="marginPreview">0원</span>
+      </div>
+      <div class="trade-buttons">
+        <button class="btn btn-long" id="btnLong">롱 · 매수</button>
+        <button class="btn btn-short" id="btnShort">숏 · 매도</button>
+      </div>
+      <p class="trade-msg" id="tradeMsg" role="status"></p>
+    </div>
+  </main>
+
+  <aside class="side-right">
+    <div class="panel-block">
+      <div class="panel-block-head">
+        <h2>내 포지션</h2>
+        <span class="mono" id="totalAssetTag">0원</span>
+      </div>
+      <div id="positionList" class="position-list">
+        <p class="empty-msg">보유 포지션 없음</p>
+      </div>
+      <div class="account-row">
+        <span>현금</span><span class="mono" id="cashValue">0원</span>
+      </div>
+    </div>
+
+    <div class="panel-block">
+      <div class="panel-block-head">
+        <h2>소식통</h2>
+        <button class="btn-mini" id="btnNewNews">+ 뉴스</button>
+      </div>
+      <div id="newsFeed" class="news-feed">
+        <p class="empty-msg">발행된 뉴스가 없습니다.</p>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- 모달: 신규/수정 기업 -->
+<div class="modal-backdrop" id="companyModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="companyModalTitle">신규 기업 등록</h3>
+    <form id="companyForm">
+      <label class="field"><span>회사명</span><input type="text" id="cfName" maxlength="20" required></label>
+      <label class="field"><span>티커 (영문 3~5자)</span><input type="text" id="cfTicker" maxlength="5" required></label>
+      <label class="field"><span>분류</span>
+        <select id="cfTag"><option value="소형주">소형주</option><option value="대형주">대형주</option></select>
+      </label>
+      <label class="field" id="cfPriceField"><span>시작가</span><input type="number" id="cfPrice" min="100" step="1" value="10000"></label>
+      <div class="modal-buttons">
+        <button type="button" class="btn btn-ghost" id="cfCancel">취소</button>
+        <button type="button" class="btn btn-ghost btn-danger" id="cfDelete" style="display:none">기업 삭제</button>
+        <button type="submit" class="btn btn-publish">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 모달: 뉴스 발행 -->
+<div class="modal-backdrop" id="newsModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3>뉴스 속보 발행</h3>
+    <form id="newsForm">
+      <label class="field"><span>대상 종목</span><select id="newsStock"></select></label>
+      <label class="field"><span>헤드라인</span><input type="text" id="newsHeadline" maxlength="60" required placeholder="예: 신규 계약 체결 소식"></label>
+      <label class="field"><span>본문 (선택)</span><textarea id="newsBody" maxlength="200" rows="3" placeholder="자세한 내용을 적으면 소식통에 함께 표시됩니다."></textarea></label>
+      <div class="field">
+        <span>성격</span>
+        <div class="segmented" id="sentimentSeg">
+          <button type="button" class="seg-btn seg-good" data-val="good">호재</button>
+          <button type="button" class="seg-btn seg-neutral is-active" data-val="neutral">중립</button>
+          <button type="button" class="seg-btn seg-bad" data-val="bad">악재</button>
+        </div>
+      </div>
+      <div class="field">
+        <span>파급력</span>
+        <div class="segmented" id="strengthSeg">
+          <button type="button" class="seg-btn" data-val="weak">약</button>
+          <button type="button" class="seg-btn is-active" data-val="mid">중</button>
+          <button type="button" class="seg-btn" data-val="strong">강</button>
+        </div>
+      </div>
+      <div class="modal-buttons">
+        <button type="button" class="btn btn-ghost" id="newsCancel">취소</button>
+        <button type="submit" class="btn btn-publish">발행</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 모달: 관리자 -->
+<div class="modal-backdrop" id="adminModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3>관리자 패널</h3>
+    <p class="admin-note">이 사이트는 로그인이 없어 접속한 누구나 관리자입니다. 아래에서 시장을 직접 운영해보세요.</p>
+    <div class="admin-actions">
+      <button type="button" class="btn btn-ghost" id="adminNewCompany">+ 신규 기업 등록</button>
+      <button type="button" class="btn btn-ghost" id="adminNewNews">+ 뉴스 속보 발행</button>
+      <button type="button" class="btn btn-ghost" id="adminEditCompany">현재 종목 정보 수정</button>
+      <button type="button" class="btn btn-ghost btn-danger" id="adminReset">시장 전체 초기화</button>
+    </div>
+    <div class="modal-buttons">
+      <button type="button" class="btn btn-ghost" id="adminCancel">닫기</button>
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <span>가상의 시뮬레이션입니다. 모든 기업·시세·뉴스는 실제와 무관합니다.</span>
+  <button class="btn-link" id="btnReset">전체 초기화</button>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
