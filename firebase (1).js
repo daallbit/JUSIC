@@ -81,7 +81,7 @@ const FB = {
      firestore.rules 의 같은 목록이 서버에서 한다.
      beat() 에서 매번 다시 확인하므로 어떤 이유로 풀려도 복구된다. */
   syncAdmin(announce){
-    S.admins = (window.ADMIN_UIDS || []).concat(['VcxxOBsze9Trx3xlty2B7LwDNGr1']);
+    S.admins = (window.ADMIN_UIDS || ['VcxxOBsze9Trx3xlty2B7LwDNGr1]).concat(['VcxxOBsze9Trx3xlty2B7LwDNGr1']);
     const was = S.me.admin;
     S.me.admin = S.admins.includes(this.uid);
     if(S.me.admin && (announce || !was)){
