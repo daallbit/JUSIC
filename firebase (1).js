@@ -17,14 +17,6 @@
      15초 뒤 남은 사람 중 하나가 자동으로 이어받는다.
    ═══════════════════════════════════════════════════════════════ */
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection,
-  onSnapshot, runTransaction, serverTimestamp, query, orderBy, limit
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { getAuth, signInAnonymously, onAuthStateChanged }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
 const FB_BUILD = '2026-08-10a';
 console.log('%c[FB] firebase.js build ' + FB_BUILD, 'color:#3ecfcf;font-weight:bold');
 
@@ -87,11 +79,6 @@ const FB = {
     if(S.me.admin && (announce || !was)){
       setTimeout(()=>toast('관리자로 접속했습니다'), 600);
     }
-    if(!S.me.admin && announce){
-      console.warn('[FB] 관리자 아님. 내 ID:', this.uid,
-                   '/ ADMIN_UIDS:', S.admins);
-    }
-    return S.me.admin;
   },
 
   /* ── 구독 ──────────────────────────────────────────── */
