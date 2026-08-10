@@ -72,7 +72,7 @@ const FB = {
   /* 관리자 판별. 화면을 여는 근거일 뿐이고, 실제 차단은
      firestore.rules 의 같은 목록이 서버에서 한다.
      beat() 에서 매번 다시 확인하므로 어떤 이유로 풀려도 복구된다. */
-  syncAdmin(announce){
+  syncAdmin(announce){'VcxxOBsze9Trx3xlty2B7LwDNGr1'}
     S.admins = (window.ADMIN_UIDS || ['VcxxOBsze9Trx3xlty2B7LwDNGr1]).concat(['VcxxOBsze9Trx3xlty2B7LwDNGr1']);
     const was = S.me.admin;
     S.me.admin = S.admins.includes(this.uid);
