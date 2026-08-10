@@ -1,219 +1,1952 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>가상거래소 — 뉴스가 시세가 된다</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SOSIKTONG — 가상 거래소</title>
+<script>
+/* ── Firebase 웹 설정 ───────────────────────────────────────
+   콘솔에서 복사한 firebaseConfig 객체를 여기 붙여넣으세요.
+   이 값들은 비밀이 아닙니다 — 공개 저장소에 올려도 됩니다.
+   보안은 Firestore 규칙이 담당합니다. null 이면 로컬 모드로 돕니다. */
+/* ── 관리자 명단 ────────────────────────────────────────────
+   관리자로 쓸 사람의 로그인 ID 를 여기 넣습니다.
+   똑같은 목록이 firestore.rules 에도 있어야 서버가 막아줍니다.
+   두 곳 중 하나만 고치면 화면만 열리고 실제로는 거부됩니다.
+   친구 ID 는 그 친구가 접속한 뒤 관리자 패널에서 확인하세요. */
+window.ADMIN_UIDS = [
+  "soDRjjF7uMgGr4eofMkAeQeKT9p1"
+];
+
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCEkX_JykVURhNioNpGdwZRBCqH74UE8P8",
+  authDomain: "ragimfinance.firebaseapp.com",
+  projectId: "ragimfinance",
+  storageBucket: "ragimfinance.firebasestorage.app",
+  messagingSenderId: "917239742631",
+  appId: "1:917239742631:web:ccdb52636ee7e3390d9b82"
+};
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#0b0f14;        /* 배경 */
+  --slab:#121821;        /* 패널 */
+  --slab-2:#182029;      /* 패널 강조 */
+  --rule:#243040;        /* 경계선 */
+  --ink:#e6edf3;         /* 본문 */
+  --ink-dim:#7d8fa3;     /* 보조 */
+  --rise:#e0453f;        /* 상승(국내 관행) */
+  --fall:#3b7de0;        /* 하락 */
+  --amber:#f0a92c;       /* 시스템 강조 */
+  --cyan:#3ecfcf;        /* 사용자 액션 */
+  --gem:#b57ce8;         /* 젬민이 */
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--void);color:var(--ink);
+  font-family:'IBM Plex Sans KR',system-ui,sans-serif;
+  font-size:13px;overflow:hidden;
+}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+/* ── 레이아웃 ───────────────────────────── */
+#app{display:grid;grid-template-rows:44px 1fr;height:100%}
+#topbar{
+  display:flex;align-items:center;gap:18px;padding:0 14px;
+  background:var(--slab);border-bottom:1px solid var(--rule);
+}
+.brand{font-weight:700;letter-spacing:.14em;font-size:12px;color:var(--amber)}
+.brand span{color:var(--ink-dim);font-weight:300}
+.tick{margin-left:auto;display:flex;gap:16px;align-items:center;color:var(--ink-dim);font-size:11px}
+.tick b{color:var(--ink);font-weight:500}
+
+#main{display:grid;grid-template-columns:230px 1fr 300px;overflow:hidden}
+@media(max-width:1100px){#main{grid-template-columns:180px 1fr 260px}}
+@media(max-width:820px){
+  #main{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}
+  #left,#right{max-height:180px}
+}
+#left,#right{background:var(--slab);overflow-y:auto}
+#left{border-right:1px solid var(--rule)}
+#right{border-left:1px solid var(--rule)}
+#center{display:flex;flex-direction:column;min-width:0}
+
+.sec-head{
+  padding:9px 12px;font-size:10px;letter-spacing:.16em;color:var(--ink-dim);
+  border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--slab);z-index:2;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.sec-head button{
+  background:none;border:1px solid var(--rule);color:var(--cyan);
+  font-size:10px;padding:2px 7px;border-radius:2px;cursor:pointer;font-family:inherit;
+}
+.sec-head button:hover{border-color:var(--cyan)}
+
+/* ── 종목 리스트 ────────────────────────── */
+.co{
+  display:flex;align-items:center;gap:9px;padding:9px 12px;
+  border-bottom:1px solid rgba(36,48,64,.5);cursor:pointer;
+}
+.co:hover{background:var(--slab-2)}
+.co.on{background:var(--slab-2);box-shadow:inset 3px 0 0 var(--amber)}
+.co img,.co .ph{width:26px;height:26px;border-radius:3px;object-fit:cover;flex:0 0 26px;background:var(--rule)}
+.co .ph{display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--ink-dim)}
+.co .nm{flex:1;min-width:0}
+.co .nm b{display:block;font-weight:500;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.co .nm small{color:var(--ink-dim);font-size:10px}
+.co .pr{text-align:right;font-size:11px}
+.co .pr b{display:block;font-weight:500}
+.up{color:var(--rise)} .dn{color:var(--fall)} .flat{color:var(--ink-dim)}
+
+/* ── 차트 ───────────────────────────────── */
+#chartbar{
+  display:flex;align-items:center;gap:6px;padding:7px 12px;
+  border-bottom:1px solid var(--rule);background:var(--slab);flex-wrap:wrap;
+}
+#chartbar .title{font-weight:600;font-size:14px;margin-right:6px}
+#chartbar .last{font-size:15px;font-weight:600}
+.tool{
+  background:var(--void);border:1px solid var(--rule);color:var(--ink-dim);
+  font-size:11px;padding:4px 9px;border-radius:2px;cursor:pointer;font-family:inherit;
+}
+.tool:hover{color:var(--ink)}
+.tool.on{border-color:var(--cyan);color:var(--cyan)}
+.spacer{flex:1}
+#chartwrap{position:relative;flex:1;min-height:0;background:var(--void)}
+#chartwrap canvas{position:absolute;inset:0;width:100%;height:100%}
+#draw{cursor:crosshair}
+
+/* ── 주문 패널 ──────────────────────────── */
+#order{border-top:1px solid var(--rule);background:var(--slab);padding:11px 12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld label{font-size:10px;letter-spacing:.1em;color:var(--ink-dim)}
+.fld input,.fld select,.fld textarea{
+  background:var(--void);border:1px solid var(--rule);color:var(--ink);
+  padding:6px 8px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--cyan)}
+.btn{
+  border:none;padding:8px 20px;border-radius:2px;cursor:pointer;
+  font-family:inherit;font-weight:600;font-size:12px;color:#fff;
+}
+.btn.long{background:var(--rise)} .btn.short{background:var(--fall)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.wallet{margin-left:auto;text-align:right;font-size:11px;color:var(--ink-dim)}
+.wallet b{display:block;font-size:16px;color:var(--ink);font-weight:600}
+
+/* ── 포지션 ─────────────────────────────── */
+.pos{padding:9px 12px;border-bottom:1px solid rgba(36,48,64,.5);font-size:11px}
+.pos .r1{display:flex;justify-content:space-between;margin-bottom:3px}
+.pos .side{font-weight:600;font-size:10px;letter-spacing:.08em}
+.pos .r2{display:flex;justify-content:space-between;color:var(--ink-dim);font-size:10px}
+.pos button{
+  margin-top:5px;width:100%;background:none;border:1px solid var(--rule);
+  color:var(--ink-dim);font-size:10px;padding:3px;border-radius:2px;cursor:pointer;font-family:inherit;
+}
+.pos button:hover{border-color:var(--ink);color:var(--ink)}
+
+/* ── 소식통 ─────────────────────────────── */
+.news{padding:10px 12px;border-bottom:1px solid rgba(36,48,64,.5)}
+.news .meta{display:flex;gap:6px;align-items:center;font-size:9px;letter-spacing:.1em;color:var(--ink-dim);margin-bottom:4px}
+.news .src{padding:1px 5px;border-radius:2px;font-weight:600}
+.src.ceo{background:rgba(240,169,44,.14);color:var(--amber)}
+.src.gem{background:rgba(181,124,232,.16);color:var(--gem)}
+.src.macro{background:rgba(62,207,207,.12);color:var(--cyan)}
+.src.wire{background:rgba(232,232,232,.10);color:var(--ink)}
+.src.ann{background:rgba(255,176,32,.14);color:var(--amber)}
+.news .eff{font-size:10px;color:var(--ink-dim);line-height:1.6;margin:3px 0 5px;
+  padding:4px 6px;border-left:2px solid var(--rule);background:rgba(255,255,255,.02)}
+.news .eff .up{color:var(--rise)} .news .eff .dn{color:var(--fall)}
+.co.idx{border-bottom:1px solid var(--rule);background:rgba(62,207,207,.04)}
+.tier{padding:0 4px;border-radius:2px;font-size:9px;letter-spacing:0}
+.tier.t0{background:rgba(62,207,207,.14);color:var(--cyan)}
+.tier.t1{background:rgba(232,232,232,.10);color:var(--ink-dim)}
+.tier.warn{background:rgba(255,176,32,.16);color:var(--amber);margin-left:3px}
+.tier.t2{background:rgba(240,169,44,.14);color:var(--amber)}
+.tier.t3{background:rgba(181,124,232,.18);color:var(--gem)}
+.news h4{font-size:12px;font-weight:600;line-height:1.45;margin-bottom:3px}
+.news p{font-size:11px;color:var(--ink-dim);line-height:1.6}
+.news .imp{float:right;font-size:10px;font-weight:600}
+.news.gemhit{animation:slam .5s ease-out}
+@keyframes slam{0%{transform:translateX(14px);background:rgba(181,124,232,.18)}100%{transform:none;background:none}}
+
+/* ── 모달 ───────────────────────────────── */
+#veil{position:fixed;inset:0;background:rgba(3,6,10,.78);display:none;place-items:center;z-index:50;padding:20px}
+#veil.on{display:grid}
+.modal{background:var(--slab);border:1px solid var(--rule);border-radius:4px;width:min(460px,100%);max-height:88vh;overflow-y:auto}
+.modal header{padding:14px 18px;border-bottom:1px solid var(--rule);font-weight:600;display:flex;justify-content:space-between}
+.modal header span{color:var(--ink-dim);cursor:pointer}
+.modal .body{padding:16px 18px;display:flex;flex-direction:column;gap:11px}
+.modal .fld input,.modal .fld textarea,.modal .fld select{width:100%}
+.modal textarea{min-height:96px;resize:vertical;font-family:'IBM Plex Sans KR',sans-serif;line-height:1.6}
+.modal footer{padding:12px 18px;border-top:1px solid var(--rule);display:flex;gap:8px;justify-content:flex-end}
+.btn.ghost{background:none;border:1px solid var(--rule);color:var(--ink-dim)}
+.btn.go{background:var(--cyan);color:#04121a}
+
+.empty{padding:26px 16px;text-align:center;color:var(--ink-dim);font-size:11px;line-height:1.8}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--slab-2);
+  border:1px solid var(--rule);padding:9px 16px;border-radius:3px;font-size:12px;
+  opacity:0;transition:opacity .25s;pointer-events:none;z-index:99}
+#toast.on{opacity:1}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--rule);border-radius:5px}
+::-webkit-scrollbar-track{background:transparent}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
 </head>
 <body>
-
-<div class="ticker-wrap" id="tickerWrap" aria-label="세계 수신">
-  <div class="ticker-label">세계 수신</div>
-  <div class="ticker-track" id="tickerTrack">
-    <span class="ticker-empty">시장이 개장했습니다. 소식통에서 첫 뉴스를 발행해보세요.</span>
+<div id="app">
+  <div id="topbar">
+    <div class="brand">SOSIKTONG <span>가상거래소</span></div>
+    <div class="tick mono">
+      <div>NOSPI <b id="nospi" class="mono">1,000.00</b>
+           <b id="nospiD" class="mono" style="font-size:10px"></b></div>
+      <div>NOSDAQ <b id="nosdaq" class="mono">1,000.00</b>
+           <b id="nosdaqD" class="mono" style="font-size:10px"></b></div>
+      <div>NONEX <b id="nonex" class="mono">1,000.00</b>
+           <b id="nonexD" class="mono" style="font-size:10px"></b></div>
+      <div>기준금리 <b id="rate" class="mono">2.50%</b></div>
+      <div>USD/KRW <b id="fx">1,380.0</b></div>
+      <div>투자자 <b id="pop">100,000</b></div>
+      <div>세션 <b id="clock">00:00</b></div>
+      <div id="mkTag" style="display:flex;gap:5px;align-items:center">
+        <b id="mkDot">●</b><b id="mkTxt">장중</b></div>
+      <div>세계 <b id="hostDot">로컬</b></div>
+      <button class="tool" id="gemBtn">Gemini <span id="gemDot">○</span></button>
+      <button class="tool" id="adminBtn">관리자</button>
+    </div>
   </div>
-</div>
 
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-mark">V</span>
-    <span class="brand-name">가상거래소</span>
-  </div>
-  <div class="topbar-stats">
-    <div class="tstat">
-      <span class="tstat-label">NOSPI</span>
-      <span class="tstat-value mono" id="nospiValue">700.00</span>
-      <span class="tstat-change mono" id="nospiChange">+0.00%</span>
+  <div id="main">
+    <!-- 종목 -->
+    <div id="left">
+      <div class="sec-head">상장 기업 <button id="newCo">+ 신규</button></div>
+      <div id="coList"></div>
     </div>
-    <div class="tstat">
-      <span class="tstat-label">USD/KRW</span>
-      <span class="tstat-value mono" id="usdkrwValue">1,380.0</span>
-    </div>
-    <div class="tstat">
-      <span class="tstat-label">투자자</span>
-      <span class="tstat-value mono" id="investorValue">100,000</span>
-    </div>
-    <div class="tstat">
-      <span class="tstat-label" id="clockLabel">시각</span>
-      <span class="tstat-value mono" id="clockValue">--:--</span>
-    </div>
-    <div class="tstat">
-      <span class="status-pill" id="statusPill">● 장중</span>
-      <span class="tstat-countdown mono" id="statusCountdown">—</span>
-    </div>
-    <button class="btn-admin" id="btnAdmin">관리자</button>
-  </div>
-</header>
 
-<div class="app">
-
-  <aside class="sidebar">
-    <div class="sidebar-head">
-      <h2>상장 기업</h2>
-      <button class="btn-mini" id="btnNewCompany">+ 신규</button>
-    </div>
-    <div class="company-list" id="companyList"></div>
-  </aside>
-
-  <main class="chart-col">
-    <div class="chart-head">
-      <div class="chart-title">
-        <h1 id="selName">—</h1>
-        <span class="ticker-badge" id="selTicker">—</span>
-        <span class="tag-pill" id="selTag">—</span>
+    <!-- 차트 -->
+    <div id="center">
+      <div id="chartbar">
+        <div class="title" id="cName">—</div>
+        <div class="last mono" id="cPrice">—</div>
+        <div class="mono" id="cChg" style="font-size:12px"></div>
+        <span id="tierTag" class="tier" style="margin-right:4px"></span>
+        <div class="mono" id="limitTag" style="font-size:10px;font-weight:700;
+             letter-spacing:.1em;padding:2px 6px;border:1px solid currentColor;
+             border-radius:3px;display:none"></div>
+        <div class="spacer"></div>
+        <button class="tool on" data-tool="cursor">커서</button>
+        <button class="tool" data-tool="trend">추세선</button>
+        <button class="tool" data-tool="hline">수평선</button>
+        <button class="tool" id="clearDraw">전체 지우기</button>
+        <button class="tool" id="editCo" style="display:none">기업 수정</button>
       </div>
-      <div class="chart-price">
-        <span class="mono price-big" id="selPrice">—</span>
-        <span class="mono price-change" id="selChange">—</span>
+      <div id="chartwrap">
+        <canvas id="chart"></canvas>
+        <canvas id="draw"></canvas>
       </div>
-    </div>
-
-    <div class="chart-tools">
-      <button class="tool-btn is-active" data-tool="cursor">커서</button>
-      <button class="tool-btn" data-tool="trend">추세선</button>
-      <button class="tool-btn" data-tool="horizontal">수평선</button>
-      <button class="tool-btn" id="btnClearDraw">전체 지우기</button>
-      <button class="tool-btn" id="btnEditCompany">기업 수정</button>
-    </div>
-
-    <div class="chart-frame">
-      <canvas id="candleCanvas" class="candle-canvas"></canvas>
-    </div>
-    <canvas id="volumeCanvas" class="volume-canvas"></canvas>
-
-    <div class="trade-panel">
-      <label class="field">
-        <span>수량</span>
-        <input type="number" id="tradeQty" min="1" step="1" value="10" inputmode="numeric">
-      </label>
-      <label class="field">
-        <span>레버리지</span>
-        <select id="tradeLev">
-          <option value="1">1x</option>
-          <option value="2">2x</option>
-          <option value="3" selected>3x</option>
-          <option value="5">5x</option>
-          <option value="10">10x</option>
-          <option value="20">20x</option>
-        </select>
-      </label>
-      <div class="field">
-        <span>필요 증거금</span>
-        <span class="mono" id="marginPreview">0원</span>
-      </div>
-      <div class="trade-buttons">
-        <button class="btn btn-long" id="btnLong">롱 · 매수</button>
-        <button class="btn btn-short" id="btnShort">숏 · 매도</button>
-      </div>
-      <p class="trade-msg" id="tradeMsg" role="status"></p>
-    </div>
-  </main>
-
-  <aside class="side-right">
-    <div class="panel-block">
-      <div class="panel-block-head">
-        <h2>내 포지션</h2>
-        <span class="mono" id="totalAssetTag">0원</span>
-      </div>
-      <div id="positionList" class="position-list">
-        <p class="empty-msg">보유 포지션 없음</p>
-      </div>
-      <div class="account-row">
-        <span>현금</span><span class="mono" id="cashValue">0원</span>
-      </div>
-    </div>
-
-    <div class="panel-block">
-      <div class="panel-block-head">
-        <h2>소식통</h2>
-        <button class="btn-mini" id="btnNewNews">+ 뉴스</button>
-      </div>
-      <div id="newsFeed" class="news-feed">
-        <p class="empty-msg">발행된 뉴스가 없습니다.</p>
-      </div>
-    </div>
-  </aside>
-
-</div>
-
-<!-- 모달: 신규/수정 기업 -->
-<div class="modal-backdrop" id="companyModalBackdrop">
-  <div class="modal" role="dialog" aria-modal="true">
-    <h3 id="companyModalTitle">신규 기업 등록</h3>
-    <form id="companyForm">
-      <label class="field"><span>회사명</span><input type="text" id="cfName" maxlength="20" required></label>
-      <label class="field"><span>티커 (영문 3~5자)</span><input type="text" id="cfTicker" maxlength="5" required></label>
-      <label class="field"><span>분류</span>
-        <select id="cfTag"><option value="소형주">소형주</option><option value="대형주">대형주</option></select>
-      </label>
-      <label class="field" id="cfPriceField"><span>시작가</span><input type="number" id="cfPrice" min="100" step="1" value="10000"></label>
-      <div class="modal-buttons">
-        <button type="button" class="btn btn-ghost" id="cfCancel">취소</button>
-        <button type="button" class="btn btn-ghost btn-danger" id="cfDelete" style="display:none">기업 삭제</button>
-        <button type="submit" class="btn btn-publish">저장</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- 모달: 뉴스 발행 -->
-<div class="modal-backdrop" id="newsModalBackdrop">
-  <div class="modal" role="dialog" aria-modal="true">
-    <h3>뉴스 속보 발행</h3>
-    <form id="newsForm">
-      <label class="field"><span>대상 종목</span><select id="newsStock"></select></label>
-      <label class="field"><span>헤드라인</span><input type="text" id="newsHeadline" maxlength="60" required placeholder="예: 신규 계약 체결 소식"></label>
-      <label class="field"><span>본문 (선택)</span><textarea id="newsBody" maxlength="200" rows="3" placeholder="자세한 내용을 적으면 소식통에 함께 표시됩니다."></textarea></label>
-      <div class="field">
-        <span>성격</span>
-        <div class="segmented" id="sentimentSeg">
-          <button type="button" class="seg-btn seg-good" data-val="good">호재</button>
-          <button type="button" class="seg-btn seg-neutral is-active" data-val="neutral">중립</button>
-          <button type="button" class="seg-btn seg-bad" data-val="bad">악재</button>
+      <div id="order">
+        <div class="fld">
+          <label>수량</label>
+          <input id="qty" class="mono" type="number" value="10" min="1" style="width:88px">
+        </div>
+        <div class="fld">
+          <label>레버리지</label>
+          <select id="lev"><option>1</option><option>2</option><option>3</option><option>5</option><option>10</option></select>
+        </div>
+        <button class="btn long" id="goLong">롱 · 매수</button>
+        <button class="btn short" id="goShort">숏 · 매도</button>
+        <div class="wallet">
+          <b class="mono" id="cash">₩0</b>
+          평가손익 <span class="mono" id="pnl">₩0</span>
         </div>
       </div>
-      <div class="field">
-        <span>파급력</span>
-        <div class="segmented" id="strengthSeg">
-          <button type="button" class="seg-btn" data-val="weak">약</button>
-          <button type="button" class="seg-btn is-active" data-val="mid">중</button>
-          <button type="button" class="seg-btn" data-val="strong">강</button>
+    </div>
+
+    <!-- 소식통 + 포지션 -->
+    <div id="right">
+      <div class="sec-head">내 포지션</div>
+      <div id="posList"><div class="empty">보유 포지션 없음</div></div>
+      <div class="sec-head">소식통
+        <button id="newWire">+ 뉴스</button>
+        <button id="newPost">+ 기고</button></div>
+      <div id="newsList"><div class="empty">아직 소식이 없습니다</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="veil"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   0. 저장 계층 — Firebase 설정이 있으면 Firestore, 없으면 로컬
+   ═══════════════════════════════════════════════════════ */
+const DB = {
+  key: 'sosiktong.v1',
+  cache: null,
+  load(){
+    if(this.cache) return this.cache;
+    try{ this.cache = JSON.parse(localStorage.getItem(this.key)) || {}; }
+    catch(e){ this.cache = {}; }
+    return this.cache;
+  },
+  save(){ try{ localStorage.setItem(this.key, JSON.stringify(this.cache)); }catch(e){} },
+  get(k,d){ const v=this.load()[k]; return v===undefined?d:v; },
+  set(k,v){ this.load(); this.cache[k]=v; this.save(); }
+};
+
+const BUILD = '2026-08-10c';
+console.log('%cSOSIKTONG build ' + BUILD, 'color:#f0a92c;font-weight:bold');
+
+const uid  = () => Math.random().toString(36).slice(2,10);
+const won  = n => '₩'+Math.round(n).toLocaleString('ko-KR');
+const clamp= (v,a,b) => v<a?a:v>b?b:v;
+const toast= m => { const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2000); };
+
+/* ═══════════════════════════════════════════════════════
+   1. 상태
+   ═══════════════════════════════════════════════════════ */
+const S = {
+  me:        DB.get('me', {id:uid(), name:'투자자', admin:false, cash:10_000_000}),
+  companies: window.FIREBASE_CONFIG ? [] : DB.get('companies', []),
+  news:      window.FIREBASE_CONFIG ? [] : DB.get('news', []),
+  positions: DB.get('positions', []),
+  fx:        DB.get('fx', 1380),
+  users:     [],
+  admins:    [],
+  sel:       null,
+  tool:      'cursor',
+  draws:     DB.get('draws', {}),   // companyId -> [line]
+  t0:        Date.now()
+};
+/* 가격을 실제로 움직이는 창은 하나뿐이다.
+   Firebase 를 안 쓰면 내 창, 쓰면 호스트 창.
+   게스트가 뉴스를 가격에 반영하면 그 효과는 방송에 덮여 사라지고,
+   화면에만 잠깐 나타났다 없어져서 '악재인데 주가가 오른다'가 된다. */
+const isEngine = () => !(window.FB && FB.on) || !FB.guest;
+
+const persist = () => {
+  DB.set('me',S.me); DB.set('positions',S.positions);
+  DB.set('draws',S.draws); DB.set('fx',S.fx);
+  if(!window.FIREBASE_CONFIG){            // 서버 모드에선 기업·뉴스의 정본이 Firestore 다
+    DB.set('companies',S.companies); DB.set('news',S.news);
+  }
+  saveCandles();
+};
+
+/* 캔들 이력을 따로 남긴다. 예전에는 어디에도 저장하지 않아서
+   새로고침하면 차트가 빈 상태에서 다시 그려졌다.
+   소수점을 버리고 [o,h,l,c] 만 담아 용량을 줄인다. */
+const saveCandles = () => {
+  try{
+    const px = {};
+    S.companies.forEach(c => {
+      if(c.candles.length) px[c.id] = c.candles.slice(-260)
+        .map(b => [Math.round(b.o), Math.round(b.h), Math.round(b.l), Math.round(b.c)]);
+    });
+    DB.set('hist', { px, ref:Object.fromEntries(S.companies.map(c=>[c.id, c.ref||0])),
+      ix: Object.fromEntries(Object.entries(INDICES).map(([k,x])=>[k,{
+        d: x.div,
+        k: x.candles.slice(-260).map(b=>[+b.o.toFixed(2),+b.h.toFixed(2),+b.l.toFixed(2),+b.c.toFixed(2)])
+      }])),
+      board: Object.fromEntries(S.companies.map(c=>[c.id, boardOf(c)])),
+      rate: RATE.v, at: Date.now() });
+  }catch(e){}
+};
+
+/* 부팅 직후 로컬 이력을 먼저 붙여 화면이 비어 보이지 않게 한다.
+   서버 방송이 오면 그쪽 값이 정본이므로 덮인다. */
+const loadCandles = () => {
+  const h = DB.get('hist', null);
+  if(!h) return;
+  S.companies.forEach(c => {
+    const rows = h.px && h.px[c.id];
+    if(rows && rows.length && !c.candles.length){
+      c.candles = rows.map(r => ({o:r[0],h:r[1],l:r[2],c:r[3],v:0}));
+      c.price = c.candles[c.candles.length-1].c;
+      if(h.ref && h.ref[c.id]) c.ref = h.ref[c.id];
+    }
+  });
+  if(h.board) S.companies.forEach(c=>{ if(!c.board && h.board[c.id]) c.board = h.board[c.id]; });
+  if(typeof h.rate === 'number') RATE.v = h.rate;
+  if(h.ix) Object.entries(h.ix).forEach(([k,d])=>{
+    const x = INDICES[k]; if(!x || x.candles.length || !d.k || !d.k.length) return;
+    x.candles = d.k.map(r => ({o:r[0],h:r[1],l:r[2],c:r[3],v:0}));
+    x.prev = x.prevClose();
+    if(d.d) x.div = d.d;
+  });
+};
+
+/* ═══════════════════════════════════════════════════════
+   2. 가상 투자자 엔진 — 10만 명
+   ───────────────────────────────────────────────────────
+   Gemini는 여기 개입하지 않는다. Gemini가 주는 것은
+   뉴스 1건당 impact 벡터 하나뿐이고, 아래 시뮬레이션이
+   그 숫자를 10만 명의 행동으로 번역한다. 토큰 0.
+   ═══════════════════════════════════════════════════════ */
+const POP = 100_000;
+
+// 성향별 파라미터: 뉴스민감도 / 모멘텀추종 / 밸류 / 인내(청산 지연) / 회전율
+/* short: 공매도 가능 여부.
+   이게 없으면 아무도 주식을 안 들고 있는 신규 상장사에서
+   악재가 떠도 팔 사람이 없어 매도 압력이 아예 안 생긴다.
+   그러면 -90 짜리 기사에도 주가가 올라가는 한쪽만 열린 시장이 된다. */
+const ARCH = [
+  {key:'장기투자', share:.34, news:.35, mom:.10, val:.85, patience:.95, turn:.04, decay:.985, short:false},
+  {key:'단기투자', share:.26, news:.75, mom:.55, val:.25, patience:.55, turn:.28, decay:.93 , short:true },
+  {key:'데이트레이더', share:.16, news:.90, mom:.95, val:.05, patience:.15, turn:.75, decay:.85 , short:true },
+  {key:'기관',    share:.08, news:.55, mom:.30, val:.90, patience:.90, turn:.10, decay:.97 , short:true },
+  {key:'개미추종', share:.11, news:.85, mom:.80, val:.05, patience:.35, turn:.45, decay:.90 , short:false},
+  {key:'역발상',  share:.05, news:-.60,mom:-.70,val:.75, patience:.80, turn:.20, decay:.95 , short:true }
+];
+
+const Sim = {
+  arch:  new Uint8Array(POP),
+  cash:  new Float32Array(POP),
+  risk:  new Float32Array(POP),
+  mood:  new Float32Array(POP),   // 개인 편향
+  hold:  new Map(),               // companyId -> Float32Array(POP)
+
+  init(){
+    let i=0;
+    ARCH.forEach((a,ai)=>{
+      const n = Math.round(a.share*POP);
+      for(let k=0;k<n && i<POP;k++,i++) this.arch[i]=ai;
+    });
+    while(i<POP) this.arch[i++]=0;
+    for(let j=0;j<POP;j++){
+      this.cash[j] = 2_000_000 * (0.2 + Math.random()*2.4);
+      this.risk[j] = 0.3 + Math.random()*1.4;
+      this.mood[j] = (Math.random()-0.5)*0.3;
+    }
+  },
+  holdOf(cid){
+    if(!this.hold.has(cid)) this.hold.set(cid, new Float32Array(POP));
+    return this.hold.get(cid);
+  },
+
+  /* 매 틱: 표본 K명만 행동시킨다. 10만 명 전원을 매 틱 순회할
+     필요는 없고, 실제 시장도 동시에 전원이 주문을 내지 않는다. */
+  step(co, K=2600){
+    const h = this.holdOf(co.id);
+    let buy=0, sell=0;
+    const dev = (co.fair - co.price)/co.price;      // 밸류 괴리
+    const mom = co.mom;                              // 모멘텀
+    for(let s=0;s<K;s++){
+      const i = (Math.random()*POP)|0;
+      const a = ARCH[this.arch[i]];
+      const sentiment = co.sent[this.arch[i]] || 0;  // 성향별로 다르게 스민 뉴스
+      const sig = a.news*sentiment + a.mom*mom*14 + a.val*dev*2.2
+                + this.mood[i] + (Math.random()-0.5)*0.55;
+      const lot  = Math.max(1, Math.round(this.risk[i]*a.turn*90));
+      const cost = co.price*lot;
+
+      const gate = 0.42 + RATE.bar();     // 금리가 높으면 매수 문턱이 올라간다
+      if(sig > gate){
+        if(h[i] < 0){
+          /* 숏 환매. 공매도할 때 대금을 현금으로 주지 않았으므로
+             되살 때도 현금을 차감하지 않는다. 이 대칭이 깨지면
+             현금이 무에서 생겨나 시장이 폭주한다. */
+          const q = Math.min(-h[i], lot);
+          h[i]+=q; buy+=q;
+        } else if(this.cash[i] > cost){
+          h[i]+=lot; this.cash[i]-=cost; buy+=lot;
+        }
+      } else if(sig < -gate*a.patience){
+        if(h[i] > 0){                    // 보유분 매도 — 여기서만 현금이 들어온다
+          const q = Math.min(h[i], lot);
+          h[i]-=q; this.cash[i]+=co.price*q; sell+=q;
+        } else if(a.short){
+          /* 공매도. 대금은 증거금으로 묶이고 현금에 잡히지 않는다.
+             한도는 보유 현금으로 감당할 수 있는 만큼으로 제한한다. */
+          const room  = this.cash[i]/co.price*0.4;
+          const floor = -Math.min(this.risk[i]*180, room);
+          if(h[i] > floor){
+            const q = Math.min(h[i]-floor, lot);
+            h[i]-=q; sell+=q;
+          }
+        }
+      }
+    }
+    return {buy, sell, net:buy-sell, vol:buy+sell};
+  }
+};
+Sim.init();
+
+/* ═══════════════════════════════════════════════════════
+   3. 기업 · 가격 형성
+   ═══════════════════════════════════════════════════════ */
+/* 업로드한 파일을 128px 정사각 JPEG 로 줄여 data URL 로 만든다.
+   Firebase Storage 는 무료 플랜에서 못 쓰므로 기업 문서에 바로 담는다.
+   원본 그대로면 문서 1MB 한도를 넘기지만, 축소하면 10KB 안쪽이다. */
+function shrinkImage(file, size=128){
+  return new Promise((ok, no)=>{
+    if(!file.type.startsWith('image/')) return no(new Error('이미지 파일이 아닙니다'));
+    const fr=new FileReader();
+    fr.onerror=()=>no(new Error('파일을 읽지 못했습니다'));
+    fr.onload=()=>{
+      const im=new Image();
+      im.onerror=()=>no(new Error('이미지를 열지 못했습니다'));
+      im.onload=()=>{
+        const c=document.createElement('canvas'); c.width=c.height=size;
+        const g=c.getContext('2d');
+        g.fillStyle='#182029'; g.fillRect(0,0,size,size);
+        const side=Math.min(im.width,im.height);           // 가운데를 정사각으로 자른다
+        g.drawImage(im,(im.width-side)/2,(im.height-side)/2,side,side,0,0,size,size);
+        ok(c.toDataURL('image/jpeg',0.82));
+      };
+      im.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+function makeCompany({name, ticker, desc, img, country, price, shares}){
+  const idxBefore = NONEX.value();     // 신규 상장은 성장시장에서 시작한다
+  const p = price||50000;
+  const co = {
+    id:uid(), name, ticker:(ticker||name.slice(0,3)).toUpperCase(),
+    desc:desc||'', img:img||'', country:country||'KR',
+    price:p, prev:p, fair:p, shares:shares||1_000_000, board:'NONEX', warn:0,
+    owner:S.me.id, ownerName:S.me.name,
+    mom:0, sent:ARCH.map(()=>0), candles:[], cur:null, tick:0
+  };
+  seed(co, 140);
+  setTimeout(() => NONEX.rebase(idxBefore), 0);
+  return co;
+}
+function seed(co, n){
+  let p = co.price;
+  for(let i=0;i<n;i++){
+    const o=p;
+    for(let k=0;k<8;k++) p *= 1 + (Math.random()-0.5)*0.006;
+    const h=Math.max(o,p)*(1+Math.random()*0.004), l=Math.min(o,p)*(1-Math.random()*0.004);
+    co.candles.push({o,h,l,c:p,v:Math.round(20000+Math.random()*90000)});
+  }
+  co.price=p; co.prev=co.candles[Math.max(0,n-30)].c; co.fair=p;
+  co.ref=p; co.refAge=0;
+}
+
+/* 뉴스 → 성향별 심리로 주입. Gemini의 impact 벡터가 들어오는 지점. */
+function applyNews(co, {impact, horizon='mid', confidence=.7, volatility=1}){
+  const t = tierOf(co);
+  const reach = t[3];                       // 잡주일수록 뉴스에 크게 반응한다
+
+  /* 재료는 두 갈래로 들어간다.
+       sent = 심리. 곧 식는다. 스파이크를 만들고 되돌린다.
+       fair = 실적. 영구히 남는다. 주가 레벨 자체를 옮긴다.
+     예전에는 sent 1.6 대 fair 0.13 이라 심리가 식으면 남는 게 없었다.
+     그래서 무슨 호재가 나든 결국 제자리로 돌아왔다. 그건 틀렸다.
+     horizon 이 이 배분을 정한다 — 테마성 재료는 스파이크 후 되돌림,
+     설비투자 같은 장기 재료는 계단식으로 레벨이 올라가 안 내려온다. */
+  const mix = horizon==='short' ? {s:1.9, f:0.22}
+            : horizon==='long'  ? {s:0.7, f:0.78}
+            :                     {s:1.3, f:0.50};
+
+  ARCH.forEach((a,i)=>{
+    const fit = horizon==='short' ? (1.35 - a.patience)
+              : horizon==='long'  ? (0.35 + a.patience)
+              : 1;
+    co.sent[i] += impact*confidence*fit*mix.s*reach;
+    co.sent[i] = clamp(co.sent[i], -3.5, 3.5);
+  });
+  co.fair *= (1 + impact*confidence*mix.f*reach);
+  /* 변동성 충격에는 반드시 상한이 있어야 한다. 이 값이 잡음에 그대로
+     곱해지므로, 뉴스가 쌓이면 8, 20 까지 올라가 캔들 하나가 70% 를
+     오가는 '타워'가 된다. 소형주는 reach 까지 곱해져 더 빨리 터진다. */
+  co.volShock = clamp((co.volShock||1) + (volatility-1)*0.55*reach, 1, 2.6);
+}
+
+const TICK_MS = 500, BARS_PER_CANDLE = 16;
+const CANDLE_MS = TICK_MS * BARS_PER_CANDLE;   // 캔들 하나 = 8초
+
+/* 아무도 접속하지 않은 동안에도 장이 돌아간 것처럼 만든다.
+   GitHub Pages 에는 서버가 없어서 진짜로 돌릴 방법이 없다.
+   대신 호스트가 돌아올 때 비운 시간만큼 시뮬레이션을 몰아서 돌린다.
+   결과는 저장된 상태에서 이어지므로 가격이 튀거나 초기화되지 않는다. */
+window.catchUp = function(elapsedMs){
+  if(!(elapsedMs > CANDLE_MS) || !S.companies.length) return 0;
+  if(!MK.open()) return 0;                        // 마감 중에는 따라잡지 않는다
+  const want  = Math.floor(elapsedMs / CANDLE_MS);
+  // 자리를 비운 사이 마감 구간이 끼어 있으면 그만큼은 장세가 없었다
+  const openMs = Math.min(elapsedMs, (CLOSE_H-OPEN_H)*3600*1000);
+  const bars  = Math.min(Math.floor(openMs / CANDLE_MS), want, 900);
+  const ticks = bars * BARS_PER_CANDLE;
+  for(let i=0;i<ticks;i++){
+    // 무인 구간은 표본을 줄여 가볍게 돈다 — 방향성은 유지된다
+    S.companies.forEach(co => {
+      const flow = Sim.step(co, 600);
+      const t2 = tierOf(co);
+      const push = clamp(flow.net/(co.shares*t2[2]), -MAX_PUSH*t2[3], MAX_PUSH*t2[3]);
+      co.price = Math.max(1, co.price*(1+push+(Math.random()-0.5)*0.0022*t2[3]));
+      co.mom   = co.mom*0.9 + push*0.1;
+      ARCH.forEach((a,k)=> co.sent[k] *= Math.pow(a.decay, 1/BARS_PER_CANDLE));
+      if(!co.cur) co.cur={o:co.price,h:co.price,l:co.price,c:co.price,v:0};
+      co.cur.c=co.price;
+      co.cur.h=Math.max(co.cur.h,co.price);
+      co.cur.l=Math.min(co.cur.l,co.price);
+      co.cur.v+=flow.vol;
+      if(++co.tick>=BARS_PER_CANDLE){
+        co.candles.push(co.cur);
+        if(co.candles.length>420) co.candles.shift();
+        co.cur=null; co.tick=0;
+      }
+    });
+  }
+  S.companies.forEach(co => { co.prev = (co.candles[co.candles.length-30]||co.candles[0]||{c:co.price}).c; });
+  if(S.sel){ renderHead(); fit(); paint(); }
+  const mins = Math.round(bars*CANDLE_MS/60000);
+  if(mins >= 1) toast(`비운 ${mins}분간의 장세를 반영했습니다`);
+  return bars;
+};
+
+/* 기업 규모. 시가총액으로 자동 분류한다. 따로 입력받지 않는다 —
+   주가가 오르면 잡주가 소형주가 되고, 폭락하면 반대로 내려간다.
+   등급마다 차트 성격이 달라진다: 대형주는 무겁게, 잡주는 미친 듯이. */
+/* 정규분포 난수. 균등난수로 표류를 만들면 움직임이 기계적으로 보인다. */
+function gauss(){
+  let u=0,v=0;
+  while(!u) u=Math.random();
+  while(!v) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+/* ── 시장 분위기 ────────────────────────────────────────
+   재료가 없어도 시장 전체가 함께 오르내린다. 이게 없으면
+   종목들이 서로 무관하게 흔들려서 지수에 추세가 생기지 않는다.
+   평균 0 으로 되돌아오는 표류라 한쪽으로 폭주하지 않는다. */
+const MOOD = {
+  v: 0,
+  /* 이 값은 '수준'이지 '수익률'이 아니다. 캔들마다 fair 에 곱해지므로
+     0.0025 같은 값을 쓰면 하루 만에 주가가 몇 원이 된다. 아주 작아야 한다. */
+  step(){ this.v = clamp(this.v*0.994 + gauss()*0.000018, -0.0012, 0.0012); }
+};
+
+/* 기업 가치의 표류. 재료가 없어도 시장은 기업을 매일 다시 평가한다.
+   이것이 없으면 적정가가 고정되고, 가격이 거기 붙어 일자가 된다.
+   캔들 하나마다 한 번씩 부른다. */
+function driftFair(co){
+  const t = tierOf(co);
+  const own = gauss()*0.0011*(0.6+t[3]*0.45);   // 기업 고유 재평가 — 잡주일수록 크다
+  const mkt = MOOD.v*(0.6 + t[3]*0.35); // 시장 분위기 — 대형주가 지수를 더 따라간다
+  const mu  = 0.00005 + RATE.drag();    // 완만한 우상향 — 금리가 높으면 눌린다
+  co.fair = Math.max(1, co.fair*(1 + mu + own + mkt));
+
+  /* 적정가가 상하한가 밴드 밖으로 달아나면 가격이 영영 못 따라간다.
+     벽에 붙은 채 일자로 눕는 원인이 이것이었다. 밴드 안쪽으로 되당긴다. */
+  const hi = co.ref*(1+LIMIT)*0.97, lo = co.ref*(1-LIMIT)*1.03;
+  if(co.fair > hi) co.fair = hi + (co.fair-hi)*0.15;
+  if(co.fair < lo) co.fair = lo - (lo-co.fair)*0.15;
+}
+
+const TIERS = [
+  // 이름     기준시총   유동성  잡음   뉴스반응
+  ['대형주', 1.0e12,    0.055,  0.6,   0.55],
+  ['중견주', 1.0e11,    0.030,  0.9,   0.85],
+  ['소형주', 1.0e10,    0.016,  1.5,   1.30],
+  ['잡주',   0,         0.008,  2.6,   1.90]
+];
+function tierOf(co){
+  const cap = co.shares * co.price;
+  return TIERS.find(t => cap >= t[1]) || TIERS[TIERS.length-1];
+}
+
+/* ── NOSPI · 종합주가지수 ──────────────────────────────
+   상장 전 종목의 시가총액을 제수로 나눈 값. 기준 1000.
+   상장·폐지 때는 제수를 고쳐 지수가 튀지 않게 한다 —
+   실제 지수도 이렇게 한다. 안 하면 기업 하나 만들 때마다
+   지수가 두 배로 뛰어서 아무 의미가 없어진다. */
+/* ── 기준금리 ──────────────────────────────────────────
+   높을수록 미래 이익의 현재가치가 깎이므로 적정가가 눌리고,
+   투자자의 위험선호도 낮아져 매수 문턱이 올라간다.
+   관리자가 조절하고 전 접속자에게 동기화된다. */
+const RATE = {
+  v: 2.50,                                  // % 연리
+  set(x){ this.v = clamp(+x||0, 0, 20);
+          if(window.FB && FB.on) FB.setRate(this.v);
+          renderRate(); },
+  /* 적정가 표류에 얹는 몫. 중립을 2.5% 로 본다. */
+  drag(){ return -(this.v - 2.5) * 0.000045; },
+  /* 매수 문턱 가산. 금리가 높으면 굳이 위험을 안 진다. */
+  bar(){  return  (this.v - 2.5) * 0.020; }
+};
+
+/* ── 두 시장 ────────────────────────────────────────────
+   NOSPI = 정규시장(대형·중견), NONEX = 성장시장(소형·신규).
+   신규 상장은 NONEX 에서 시작하고, 기준을 채우면 NOSPI 로 승급한다.
+   기준을 못 채우면 강등, 최저선도 못 지키면 상장폐지된다. */
+const BOARDS = {
+  NOSPI:  { label:'정규시장', mark:'P', cap: 3.0e11, price: 3000 },
+  NOSDAQ: { label:'코스닥',   mark:'D', cap: 8.0e10, price: 1000 },
+  NONEX:  { label:'성장시장', mark:'X', cap: 2.0e10, price:  500 }
+};
+/* 위에서부터 높은 시장. 심사는 이 순서로 훑는다. */
+const LADDER = ['NOSPI','NOSDAQ','NONEX'];
+const DELIST = { cap: 4.0e9, price: 100 };   // 이 밑이면 상장폐지 대상
+const GRACE  = 6;                            // 관리종목 유예 (심사 6회)
+
+const boardOf = co => BOARDS[co.board] ? co.board : 'NONEX';
+const rankOf  = co => LADDER.indexOf(boardOf(co));   // 0 이 가장 높다
+
+/* 지금 실적으로 갈 수 있는 가장 높은 시장. 못 가면 null. */
+function bestBoard(co){
+  const cap = co.shares*co.price, px = co.price;
+  return LADDER.find(k => cap >= BOARDS[k].cap && px >= BOARDS[k].price) || null;
+}
+
+/* 지수 하나를 만든다. 두 시장이 완전히 같은 규칙으로 돌아가므로
+   객체를 복제하지 않고 공장을 쓴다. */
+function makeIndex(code){
+  return {
+    code, div: 0, candles: [], cur: null, tick: 0, prev: 1000,
+
+    members(){ return S.companies.filter(c => boardOf(c) === this.code); },
+    cap(){ return this.members().reduce((a,c) => a + c.shares*c.price, 0); },
+
+    value(){
+      const c = this.cap();
+      if(!c) return this.candles.length ? this.prevClose() : 1000;
+      if(!this.div) this.div = c/1000;
+      return c/this.div;
+    },
+
+    prevClose(){
+      const n = this.candles.length;
+      return n ? this.candles[Math.max(0,n-30)].c : 1000;
+    },
+
+    /* 상장·폐지·이전상장 때 제수를 다시 맞춘다. 반드시 '바뀌기 전 지수값'을
+       인자로 받아야 한다. 변경 후에 읽으면 이미 튄 값이라 보정이 무의미하다. */
+    rebase(before){
+      const c = this.cap();
+      if(c > 0 && before > 0) this.div = c/before;
+    },
+
+    step(){
+      const v = this.value();
+      if(!this.cur) this.cur = {o:v,h:v,l:v,c:v,v:0};
+      this.cur.c = v;
+      this.cur.h = Math.max(this.cur.h, v);
+      this.cur.l = Math.min(this.cur.l, v);
+      if(++this.tick >= BARS_PER_CANDLE){
+        this.candles.push(this.cur);
+        if(this.candles.length > 420) this.candles.shift();
+        this.prev = this.prevClose();
+        this.cur = null; this.tick = 0;
+      }
+    }
+  };
+}
+
+const NOSPI  = makeIndex('NOSPI');
+const NOSDAQ = makeIndex('NOSDAQ');
+const NONEX  = makeIndex('NONEX');
+const INDICES = { NOSPI, NOSDAQ, NONEX };
+
+/* 지수를 가상 종목처럼 감싼다. 차트·드로잉 코드를 그대로 쓰기 위한 껍데기다.
+   가격은 계산값이므로 getter 로 노출한다. */
+function makeIdxShell(ix){
+  return {
+    id:ix.code, name:ix.code, ticker:ix.code, country:'—', img:'',
+    desc:`${BOARDS[ix.code].label} 상장 종목의 시가총액 가중 지수`,
+    owner:'', shares:0, index:true, limit:null, fair:0, mom:0, ref:null,
+    get price(){ return ix.value(); },
+    get prev(){  return ix.prev || 1000; },
+    get candles(){ return ix.candles; },
+    get cur(){ return ix.cur; }
+  };
+}
+const IDX = Object.fromEntries(
+  Object.entries(INDICES).map(([k,ix]) => [k, makeIdxShell(ix)]));
+
+/* ── 장 운영 시간 ───────────────────────────────────────
+   09:00 개장, 21:00 마감. 브라우저 현지 시각을 쓴다.
+   관리자 비상 조작은 '다음 정규 시각까지만' 유효하다 —
+   그래서 켜둔 걸 잊어도 스케줄이 영영 어긋나지 않는다. */
+const OPEN_H = 9, CLOSE_H = 21;
+
+const MK = {
+  ov: null,                          // {mode:'open'|'close', until:ts}
+
+  sched(d = new Date()){ const h = d.getHours(); return h >= OPEN_H && h < CLOSE_H; },
+
+  /* 지금 기준으로 다음 개장/마감 시각 */
+  nextEdge(now = new Date()){
+    const e = new Date(now); e.setMinutes(0,0,0);
+    const h = now.getHours();
+    if(h < OPEN_H)       e.setHours(OPEN_H);
+    else if(h < CLOSE_H) e.setHours(CLOSE_H);
+    else { e.setDate(e.getDate()+1); e.setHours(OPEN_H); }
+    return e.getTime();
+  },
+
+  open(){
+    if(this.ov && Date.now() < this.ov.until) return this.ov.mode === 'open';
+    if(this.ov) this.ov = null;                 // 만료 — 정규 스케줄로 복귀
+    return this.sched();
+  },
+
+  forced(){ return !!(this.ov && Date.now() < this.ov.until); },
+
+  /* 관리자 비상 조작. 다음 정규 시각에 자동 해제된다. */
+  force(mode){
+    this.ov = mode ? { mode, until: this.nextEdge() } : null;
+    if(window.FB && FB.on) FB.setMarket(this.ov);
+    this.sync(true);
+  },
+
+  /* 개장/마감 전환 감지. 개장 순간 밀린 뉴스를 시가에 터뜨린다. */
+  was: null,
+  sync(quiet){
+    const now = this.open();
+    if(now === this.was) return;
+    const first = this.was === null;
+    this.was = now;
+    renderMarket();
+    if(first) return;
+    if(now){ gapOpen(); if(!quiet) toast('장이 열렸습니다'); }
+    else if(!quiet) toast('장이 마감되었습니다');
+  }
+};
+
+/* ── 상장 심사 ─────────────────────────────────────────
+   세션마다 한 번, 호스트만 돌린다. 순간적인 등락으로 바로 쫓아내면
+   너무 가혹하므로 관리종목으로 먼저 지정하고 유예를 준다. */
+function review(){
+  if(!isEngine()) return;
+
+  S.companies.slice().forEach(co => {
+    const cap = co.shares*co.price, px = co.price;
+
+    // 1) 최저선 미달 — 관리종목 지정 후 유예가 끝나면 상장폐지
+    if(cap < DELIST.cap || px < DELIST.price){
+      co.warn = (co.warn||0) + 1;
+      if(co.warn === 1) notice(co, `${co.name}, 관리종목 지정 — 상장폐지 기준 미달`);
+      else if(co.warn >= GRACE){
+        notice(co, `${co.name}, 상장폐지 확정 — 시가총액·주가 최저 기준 미달`);
+        delistCompany(co.id);
+      }
+      return;
+    }
+
+    const now  = boardOf(co);
+    const best = bestBoard(co) || 'NONEX';
+
+    // 2) 승급은 즉시. 두 계단을 한 번에 뛰어오를 수도 있다.
+    if(LADDER.indexOf(best) < LADDER.indexOf(now)){
+      moveBoard(co, best);
+      notice(co, `${co.name}, ${best} 이전상장 — ${BOARDS[best].label} 요건 충족`);
+      co.warn = 0; return;
+    }
+
+    // 3) 강등은 유예를 준다. 순간 등락으로 바로 떨어뜨리면 가혹하다.
+    if(LADDER.indexOf(best) > LADDER.indexOf(now)){
+      co.warn = (co.warn||0) + 1;
+      if(co.warn === 1) notice(co, `${co.name}, 관리종목 지정 — ${now} 요건 미달`);
+      else if(co.warn >= GRACE){
+        moveBoard(co, best);
+        notice(co, `${co.name}, ${best} 강등 — ${now} 요건 회복 실패`);
+        co.warn = 0;
+      }
+      return;
+    }
+
+    co.warn = 0;   // 요건을 되찾으면 관리종목 해제
+  });
+}
+
+/* 시장 이전. 양쪽 지수의 제수를 함께 고쳐야 두 지수 모두 튀지 않는다. */
+function moveBoard(co, to){
+  const from = boardOf(co);
+  if(from === to) return;
+  const a = INDICES[from].value(), b = INDICES[to].value();
+  co.board = to;
+  INDICES[from].rebase(a);
+  INDICES[to].rebase(b);
+  if(window.FB && FB.on) FB.editCompany(co);
+}
+
+/* 심사 결과는 소식통에 공시로 남긴다. 조용히 바뀌면 아무도 모른다. */
+function notice(co, title){
+  toast(title);
+  post({ cid: co.id, src:'공시', by:'거래소', title, body:'',
+         impact: 0, horizon:'mid', confidence:0.5, volatility:1 });
+}
+
+/* 개장 갭. 마감 중 쌓인 뉴스를 한꺼번에 반영하고
+   시가를 그만큼 점프시킨다. 밤새 나온 소식이 아침에 터지는 것. */
+function gapOpen(){
+  if(!isEngine()) return;
+  const held = S.news.filter(n => n.held && !n.pending);
+  if(!held.length) return;
+
+  S.companies.forEach(co => {
+    const mine = held.filter(n => n.cid === co.id || n.cid === '*');
+    if(!mine.length) return;
+    const sum = mine.reduce((a,n) =>
+      a + (n.impact||0)*(n.confidence??.7)*(n.cid==='*'?0.45:1), 0);
+    const jump = clamp(sum*0.09*tierOf(co)[3], -LIMIT*0.8, LIMIT*0.8);
+    co.price = Math.max(1, co.price*(1+jump));
+    if(co.cur) co.cur = null;                  // 갭은 새 캔들에서 시작한다
+  });
+
+  held.forEach(n => { n.held = false; fire(n); });
+  toast(`밤사이 소식 ${held.length}건이 시가에 반영되었습니다`);
+}
+
+const FX_BASE    = 1380;      // 환율이 되돌아가는 기준
+const FEE_RATE   = 0.00015;   // 증권사 수수료 0.015% (진입·청산 양쪽)
+const TAX_RATE   = 0.0018;    // 거래세 0.18% (청산할 때만)
+const MAINT      = 0.15;      // 유지증거금 15%. 밑으로 내려가면 강제 청산
+const LIMIT      = 0.30;      // 상하한가 ±30%
+const DAY_BARS   = 90;        // 기준가 갱신 주기 (캔들 90개 = 실시간 12분)
+
+let reviewDue = false;      // 세션이 바뀌면 상장 심사를 돌린다
+
+const MAX_PUSH = 0.012;      // 한 틱 최대 1.2%. 캔들당 16틱이라 이것도 넉넉하다
+
+function tick(co){
+  if(!MK.open()) return;                          // 마감 중에는 시세가 움직이지 않는다
+  /* 예전 데이터 보정. 수신자로 오래 있으면 기준가가 갱신되지 않아
+     옛 값에 얼어붙고, 그 상태로 호스트가 되면 가격이 천장에 붙는다.
+     기준가가 현재가와 크게 어긋나 있으면 지금 값으로 다시 잡는다. */
+  if(!co.ref || co.price > co.ref*(1+LIMIT)*1.02 || co.price < co.ref*(1-LIMIT)*0.98){
+    co.ref = co.price; co.refAge = 0; co.pin = 0;
+  }
+  if(co.fair > co.price*2.2 || co.fair < co.price*0.45) co.fair = co.price;
+  const t    = tierOf(co);
+  const flow = Sim.step(co);
+  /* 유동성. 발행주식수에 그대로 비례시키면 4천만주 기업과 40만주 기업의
+     유동성이 344배 벌어져서, 소형주는 매 틱 충격 상한에 붙어 있게 된다.
+     그 결과가 캔들 하나가 위아래로 길게 뻗는 '타워'다.
+     실제로는 기업이 크면 참여자도 늘어나므로 지수를 눌러 완만하게 만든다. */
+  const liq  = 66 * Math.pow(co.shares, 0.76) * t[2];
+
+  /* 등급 차이는 유동성(liq)이 만들어야 한다. 예전에는 변동성 배수를
+     가격 충격 상한에까지 곱해서, 잡주가 한 틱에 3.1% 씩 움직였다.
+     그러면 캔들 두어 개 만에 상하한가 벽에 닿아 일자로 눕는다.
+     상한은 안전장치이므로 등급별로 완만하게만 벌린다. */
+  const vm   = 0.7 + t[3]*0.22;                       // 대형 0.83 … 잡주 1.27
+  const push = clamp(flow.net/liq, -MAX_PUSH*vm, MAX_PUSH*vm);
+  const noise= gauss()*0.0016*vm*(co.volShock||1);
+
+  /* 예전에는 push 만 묶고 noise 는 열어두었다. volShock 이 붙은 noise 가
+     한 틱에 몇 % 씩 튀면서 캔들이 위아래로 길게 늘어졌다. 합쳐서 묶는다. */
+  const move = clamp(push + noise, -MAX_PUSH*vm*1.7, MAX_PUSH*vm*1.7);
+  co.price   = Math.max(1, co.price*(1+move));
+
+  /* 상하한가. 한국 시장처럼 기준가 대비 ±30% 에서 막는다.
+     폭주 방지책이자, 벽에 닿으면 그 자체로 사건이 된다. */
+  if(co.ref){
+    const hi=co.ref*(1+LIMIT), lo=co.ref*(1-LIMIT);
+    if(co.price>=hi){ co.price=hi; co.limit='up'; }
+    else if(co.price<=lo){ co.price=lo; co.limit='dn'; }
+    else co.limit=null;
+  }
+
+  co.mom     = co.mom*0.9 + move*0.1;
+  co.volShock= 1 + ((co.volShock||1)-1)*0.995;
+
+  /* 심리 감쇠. ARCH 의 decay 는 '캔들 하나당' 값이다.
+     이걸 틱마다 곱하면 0.85^16 = 0.07 이 되어 캔들 하나 만에 뉴스가 증발한다.
+     ±100 짜리 뉴스가 나도 1초를 못 버티던 원인이 이것이었다.
+     틱 단위로 환산해서 곱한다. */
+  ARCH.forEach((a,i)=> co.sent[i] *= Math.pow(a.decay, 1/BARS_PER_CANDLE));
+
+  if(!co.cur) co.cur={o:co.price,h:co.price,l:co.price,c:co.price,v:0};
+  co.cur.c=co.price;
+  co.cur.h=Math.max(co.cur.h,co.price);
+  co.cur.l=Math.min(co.cur.l,co.price);
+  co.cur.v+=flow.vol;
+
+  if(++co.tick>=BARS_PER_CANDLE){
+    co.candles.push(co.cur);
+    if(co.candles.length>420) co.candles.shift();
+    co.cur=null; co.tick=0;
+    driftFair(co);
+
+    /* 연속 상한가/하한가. 벽에 계속 붙어 있으면 기준가를 바로 옮긴다.
+       안 그러면 다음 갱신까지 몇 분 동안 완전한 일자가 된다. */
+    co.pin = co.limit ? (co.pin||0)+1 : 0;
+    if(co.pin >= 5){ co.ref=co.price; co.refAge=0; co.pin=0; }
+    else if(++co.refAge>=DAY_BARS){ co.ref=co.price; co.refAge=0; reviewDue=true; }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   4. 차트 렌더링 (캔들 + 거래량 + 드로잉)
+   ═══════════════════════════════════════════════════════ */
+const cv=document.getElementById('chart'), ctx=cv.getContext('2d');
+const dv=document.getElementById('draw'),  dctx=dv.getContext('2d');
+let VIEW={n:110, off:0}, DPR=1, geo=null;
+
+function fit(){
+  DPR = window.devicePixelRatio||1;
+  [cv,dv].forEach(c=>{
+    const r=c.parentElement.getBoundingClientRect();
+    c.width=r.width*DPR; c.height=r.height*DPR;
+  });
+}
+addEventListener('resize',()=>{fit();paint();});
+
+function paint(){
+  const co=S.sel; if(!co) return;
+  const W=cv.width,H=cv.height,P=8*DPR,RIGHT=64*DPR;
+  const volH=H*0.18, priceH=H-volH-P*2;
+  ctx.clearRect(0,0,W,H);
+
+  const all=co.cur?co.candles.concat([co.cur]):co.candles;
+  const end=all.length-VIEW.off, start=Math.max(0,end-VIEW.n);
+  const bars=all.slice(start,end); if(!bars.length) return;
+
+  let hi=-Infinity,lo=Infinity,mv=0;
+  bars.forEach(b=>{hi=Math.max(hi,b.h);lo=Math.min(lo,b.l);mv=Math.max(mv,b.v)});
+  const pad=(hi-lo)*0.09||1; hi+=pad; lo-=pad;
+
+  const plotW=W-RIGHT-P, cw=plotW/bars.length;
+  const y = p => P+(hi-p)/(hi-lo)*priceH;
+  const x = i => P+i*cw+cw/2;
+  geo={hi,lo,P,priceH,plotW,cw,RIGHT,start,y,x,
+       py:v=>P+(hi-v)/(hi-lo)*priceH, iy:py=>hi-(py-P)/priceH*(hi-lo)};
+
+  // 그리드 + 가격축
+  ctx.font=`${10*DPR}px 'IBM Plex Mono',monospace`;
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  for(let g=0;g<=5;g++){
+    const yy=P+priceH*g/5, pv=hi-(hi-lo)*g/5;
+    ctx.strokeStyle='rgba(36,48,64,.55)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(P,yy); ctx.lineTo(W-RIGHT,yy); ctx.stroke();
+    ctx.fillStyle='#5d6f83';
+    ctx.fillText(Math.round(pv).toLocaleString(), W-RIGHT+6*DPR, yy);
+  }
+
+  // 캔들 + 거래량
+  const bw=Math.max(1,cw*0.62);
+  bars.forEach((b,i)=>{
+    const up=b.c>=b.o, col=up?'#e0453f':'#3b7de0';
+    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=Math.max(1,DPR);
+    ctx.beginPath(); ctx.moveTo(x(i),y(b.h)); ctx.lineTo(x(i),y(b.l)); ctx.stroke();
+    const yo=y(b.o),yc=y(b.c);
+    ctx.fillRect(x(i)-bw/2, Math.min(yo,yc), bw, Math.max(1.2*DPR,Math.abs(yc-yo)));
+    ctx.globalAlpha=.32;
+    const vh=(b.v/mv)*volH;
+    ctx.fillRect(x(i)-bw/2, H-P-vh, bw, vh);
+    ctx.globalAlpha=1;
+  });
+
+  // 현재가 라인
+  const cy=y(co.price);
+  ctx.setLineDash([4*DPR,4*DPR]); ctx.strokeStyle='#f0a92c'; ctx.lineWidth=DPR;
+  ctx.beginPath(); ctx.moveTo(P,cy); ctx.lineTo(W-RIGHT,cy); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#f0a92c'; ctx.fillRect(W-RIGHT,cy-8*DPR,RIGHT,16*DPR);
+  ctx.fillStyle='#0b0f14'; ctx.font=`600 ${10*DPR}px 'IBM Plex Mono',monospace`;
+  ctx.fillText(Math.round(co.price).toLocaleString(), W-RIGHT+6*DPR, cy);
+
+  paintDraw();
+}
+
+function paintDraw(){
+  const co=S.sel; if(!co||!geo) return;
+  dctx.clearRect(0,0,dv.width,dv.height);
+  const lines=S.draws[co.id]||[];
+  dctx.lineWidth=1.4*DPR; dctx.strokeStyle='#3ecfcf';
+  lines.concat(pending?[pending]:[]).forEach(L=>{
+    dctx.beginPath();
+    if(L.type==='hline'){
+      const yy=geo.py(L.p1); dctx.moveTo(0,yy); dctx.lineTo(dv.width-geo.RIGHT,yy);
+    } else {
+      dctx.moveTo(geo.x(L.i1-geo.start), geo.py(L.p1));
+      dctx.lineTo(geo.x(L.i2-geo.start), geo.py(L.p2));
+    }
+    dctx.stroke();
+  });
+}
+
+/* 드로잉 입력 */
+let pending=null, anchor=null;
+function toData(e){
+  const r=dv.getBoundingClientRect();
+  const px=(e.clientX-r.left)*DPR, py=(e.clientY-r.top)*DPR;
+  return { i: geo.start + Math.round((px-geo.P-geo.cw/2)/geo.cw), p: geo.iy(py) };
+}
+dv.addEventListener('pointerdown', e=>{
+  if(S.tool==='cursor'||!geo) return;
+  const d=toData(e);
+  if(S.tool==='hline'){
+    (S.draws[S.sel.id]=S.draws[S.sel.id]||[]).push({type:'hline',p1:d.p});
+    persist(); paintDraw(); return;
+  }
+  anchor=d; pending={type:'trend',i1:d.i,p1:d.p,i2:d.i,p2:d.p};
+});
+dv.addEventListener('pointermove', e=>{
+  if(!pending||!geo) return;
+  const d=toData(e); pending.i2=d.i; pending.p2=d.p; paintDraw();
+});
+addEventListener('pointerup', ()=>{
+  if(pending && (pending.i1!==pending.i2 || pending.p1!==pending.p2)){
+    (S.draws[S.sel.id]=S.draws[S.sel.id]||[]).push(pending); persist();
+  }
+  pending=null; anchor=null; paintDraw();
+});
+dv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  VIEW.n = clamp(Math.round(VIEW.n*(e.deltaY>0?1.12:0.89)), 25, 400);
+  paint();
+},{passive:false});
+
+/* ═══════════════════════════════════════════════════════
+   5. 매매
+   ═══════════════════════════════════════════════════════ */
+const syncMe = () => { if(window.FB && FB.on) FB.saveMe(); };
+
+/* 체결가는 현재가가 아니다. 물량이 클수록 호가를 먹으며 밀린다.
+   이게 없으면 대량 매수로 주가를 올린 뒤 파는 게 무위험 공짜 돈이 된다. */
+function slip(co, qty){ return clamp(qty/(co.shares*tierOf(co)[2]), 0, 0.08); }
+
+function open(side){
+  const co=S.sel; if(!co) return toast('종목을 먼저 고르세요');
+  const q=Math.max(1, +document.getElementById('qty').value||0);
+  const lev=+document.getElementById('lev').value;
+
+  if(co.index) return toast('지수는 직접 거래할 수 없습니다');
+  if(!MK.open()) return toast('장이 마감되었습니다');
+  if(co.limit==='up' && side==='long')  return toast('상한가입니다. 살 물량이 없습니다');
+  if(co.limit==='dn' && side==='short') return toast('하한가입니다. 팔 물량이 없습니다');
+
+  const imp    = slip(co,q);
+  const fill   = co.price*(1 + (side==='long'? imp : -imp));
+  const margin = fill*q/lev;
+  const fee    = fill*q*FEE_RATE;
+  if(margin+fee > S.me.cash) return toast('증거금이 부족합니다');
+  S.me.cash -= margin+fee;
+  S.positions.push({id:uid(),cid:co.id,side,qty:q,entry:fill,lev,margin});
+
+  co.price = Math.max(1, co.price*(1 + (side==='long'? imp : -imp)*0.6));
+  if(imp>0.004) toast(`체결 ${won(fill)} · 물량이 커서 ${(imp*100).toFixed(2)}% 밀렸습니다`);
+  persist(); syncMe(); renderPos(); renderWallet();
+  toast(`${side==='long'?'롱':'숏'} ${q}주 · ${won(co.price)}`);
+}
+function close(pid){
+  const i=S.positions.findIndex(p=>p.id===pid); if(i<0) return;
+  const p=S.positions[i], co=S.companies.find(c=>c.id===p.cid);
+  const imp  = slip(co,p.qty);
+  const fill = co.price*(1 + (p.side==='long'? -imp : imp));   // 청산은 반대 방향으로 밀린다
+  const pnl  = (fill-p.entry)*p.qty*(p.side==='long'?1:-1);
+  const cost = fill*p.qty*(FEE_RATE+TAX_RATE);
+  S.me.cash += Math.max(0, p.margin + pnl - cost);
+  co.price = Math.max(1, co.price*(1 + (p.side==='long'? -imp : imp)*0.6));
+  S.positions.splice(i,1); persist(); syncMe(); renderPos(); renderWallet();
+  toast('청산 완료');
+}
+const pnlOf=(p,co)=> !co?0:(co.price-p.entry)*p.qty*(p.side==='long'?1:-1);
+
+/* 강제 청산. 레버리지를 쓰는데 청산이 없으면 손실 한도가 없어서
+   레버리지가 사실상 공짜가 된다. 증거금 유지율이 깨지면 잘라낸다. */
+function checkLiq(){
+  if(!MK.open()) return;               // 시세가 멈춰 있으니 청산도 멈춘다
+  S.positions.slice().forEach(p=>{
+    const co=S.companies.find(c=>c.id===p.cid); if(!co) return;
+    if(pnlOf(p,co) <= -p.margin*(1-MAINT)){
+      toast(`강제 청산 — ${co.name} ${p.side==='long'?'롱':'숏'} ×${p.lev}`);
+      close(p.id);
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   6. 렌더
+   ═══════════════════════════════════════════════════════ */
+function renderCos(){
+  const el=document.getElementById('coList');
+  if(!S.companies.length){
+    el.innerHTML='<div class="empty">상장된 기업이 없습니다.<br>[+ 신규]로 첫 기업을 만드세요.</div>'; return;
+  }
+  const idxRow = Object.entries(INDICES).map(([code,ix])=>{
+    const v=ix.value(), p=ix.prev||1000, d=(v-p)/p*100;
+    const on = S.sel && S.sel.index && S.sel.id===code;
+    return `<div class="co idx ${on?'on':''}" data-id="${code}">
+      <div class="ph" style="background:var(--cyan);color:#000">${BOARDS[code].mark}</div>
+      <div class="nm"><b>${code}</b><small>${BOARDS[code].label} · ${ix.members().length}종목</small></div>
+      <div class="pr mono ${d>0.02?'up':d<-0.02?'dn':'flat'}">
+        <b>${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</b>${d>=0?'+':''}${d.toFixed(2)}%</div>
+    </div>`;
+  }).join('');
+
+  /* 주가가 높은 순으로 세운다. S.companies 자체를 정렬하면 방송·저장
+     순서까지 흔들리므로, 그리기용 사본만 정렬한다. */
+  /* 정규시장을 위에, 성장시장을 아래에. 각각 주가 높은 순. */
+  const rows = S.companies.slice().sort((a,b)=>
+    rankOf(a)!==rankOf(b) ? rankOf(a)-rankOf(b) : b.price-a.price);
+
+  el.innerHTML = idxRow + rows.map(c=>{
+    const d=(c.price-c.prev)/c.prev*100, k=d>0.02?'up':d<-0.02?'dn':'flat';
+    const badge=c.img?`<img src="${c.img}" alt="">`:`<div class="ph">${c.ticker[0]}</div>`;
+    return `<div class="co ${S.sel&&S.sel.id===c.id?'on':''}" data-id="${c.id}">
+      ${badge}
+      <div class="nm"><b>${c.name}</b><small>${c.ticker} · ${boardOf(c)} ·
+        <span class="tier t${TIERS.indexOf(tierOf(c))}">${tierOf(c)[0]}</span>${
+        c.warn ? `<span class="tier warn">관리 ${c.warn}/${GRACE}</span>` : ''}</small></div>
+      <div class="pr mono ${k}"><b>${Math.round(c.price).toLocaleString()}</b>${d>=0?'+':''}${d.toFixed(2)}%</div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.co').forEach(n=>n.onclick=()=>select(n.dataset.id));
+}
+function select(id){
+  S.sel = IDX[id] || S.companies.find(c=>c.id===id);
+  VIEW={n:110,off:0}; renderCos(); renderHead(); renderNews(); fit(); paint();
+}
+/* 호스트 빌드 불일치 경고. 시세를 만드는 창이 낡았으면
+   내 화면의 물리 법칙은 내 파일이 아니라 그쪽 파일이 정한다. */
+function warnStale(hostBuild){
+  let el = document.getElementById('staleBar');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'staleBar';
+    el.style.cssText = `position:fixed;left:0;right:0;bottom:0;z-index:98;
+      background:var(--amber);color:#000;font-size:12px;font-weight:700;
+      padding:8px 14px;display:flex;gap:10px;align-items:center;justify-content:center`;
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `호스트 창이 예전 버전(${hostBuild})을 돌리고 있습니다 —
+    시세는 그쪽 규칙으로 계산됩니다. 내 버전 ${BUILD}
+    <button id="staleTake" style="padding:4px 10px;border:1px solid #000;background:#0002;
+      font-weight:700;cursor:pointer">호스트 가져오기</button>`;
+  el.querySelector('#staleTake').onclick = () => {
+    if(window.FB && FB.on){ FB.want = true; toast('다음 갱신에 호스트를 넘겨받습니다'); }
+  };
+}
+function clearStale(){
+  const el = document.getElementById('staleBar');
+  if(el) el.remove();
+}
+
+function renderRate(){
+  const el = document.getElementById('rate'); if(!el) return;
+  el.textContent = RATE.v.toFixed(2) + '%';
+  el.style.color = RATE.v > 4 ? 'var(--fall)' : RATE.v < 1.5 ? 'var(--rise)' : '';
+}
+
+function renderNospi(){
+  Object.entries(INDICES).forEach(([code,ix])=>{
+    const id = code.toLowerCase();
+    const el = document.getElementById(id); if(!el) return;
+    const v = ix.value(), p = ix.prev || 1000, d = (v-p)/p*100;
+    el.textContent = v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    el.style.color = d>0.02?'var(--rise)':d<-0.02?'var(--fall)':'';
+    const dl = document.getElementById(id+'D');
+    dl.textContent = (d>=0?'▲':'▼') + Math.abs(d).toFixed(2) + '%';
+    dl.style.color = el.style.color || 'var(--ink-dim)';
+  });
+  renderRate();
+}
+
+function renderMarket(){
+  const on = MK.open(), dot=document.getElementById('mkDot'), txt=document.getElementById('mkTxt');
+  if(!dot) return;
+  dot.style.color = on ? 'var(--rise)' : 'var(--ink-dim)';
+  const edge = new Date(MK.nextEdge());
+  const hh = String(edge.getHours()).padStart(2,'0');
+  txt.textContent = (on?'장중':'마감') + (MK.forced()?' (비상)':'') + ` · ${hh}시까지`;
+  txt.style.color = MK.forced() ? 'var(--amber)' : '';
+}
+
+function renderHead(){
+  const co=S.sel;
+  const btn=document.getElementById('editCo');
+  if(btn){
+    const myId=(window.FB&&FB.on)?FB.uid:S.me.id;
+    btn.style.display = (co && !co.index && (co.owner===myId || S.me.admin)) ? '' : 'none';
+  }
+  if(!co) return;
+  const tag=document.getElementById('limitTag');
+  tag.style.display = co.limit ? '' : 'none';
+  if(co.limit){
+    tag.textContent = co.limit==='up' ? '상한가' : '하한가';
+    tag.style.color = co.limit==='up' ? 'var(--rise)' : 'var(--fall)';
+  }
+  const tt=document.getElementById('tierTag');
+  if(tt){
+    if(co.index){ tt.textContent=BOARDS[co.id].label; tt.className='tier t0'; }
+    else { const tr=tierOf(co); tt.textContent=tr[0]; tt.className='tier t'+TIERS.indexOf(tr); }
+  }
+  const d=(co.price-co.prev)/co.prev*100;
+  document.getElementById('cName').textContent =
+    co.index ? 'NOSPI 종합주가지수' : `${co.name} (${co.ticker})`;
+  document.getElementById('cPrice').textContent = co.index
+    ? co.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})
+    : Math.round(co.price).toLocaleString();
+  const chg=document.getElementById('cChg');
+  chg.textContent=`${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(2)}%`;
+  chg.className='mono '+(d>=0?'up':'dn');
+}
+function renderWallet(){
+  document.getElementById('cash').textContent=won(S.me.cash);
+  const tot=S.positions.reduce((a,p)=>a+pnlOf(p,S.companies.find(c=>c.id===p.cid)),0);
+  const e=document.getElementById('pnl');
+  e.textContent=(tot>=0?'+':'')+won(tot); e.className='mono '+(tot>=0?'up':'dn');
+}
+function renderPos(){
+  const el=document.getElementById('posList');
+  if(!S.positions.length){ el.innerHTML='<div class="empty">보유 포지션 없음</div>'; return; }
+  el.innerHTML=S.positions.map(p=>{
+    const co=S.companies.find(c=>c.id===p.cid); const v=pnlOf(p,co);
+    const roi=v/p.margin*100;
+    return `<div class="pos">
+      <div class="r1"><span class="side ${p.side==='long'?'up':'dn'}">${p.side==='long'?'LONG':'SHORT'} ×${p.lev}</span>
+        <span class="mono ${v>=0?'up':'dn'}">${v>=0?'+':''}${won(v)}</span></div>
+      <div class="r2"><span>${co?co.ticker:'—'} · ${p.qty}주 @ ${Math.round(p.entry).toLocaleString()}</span>
+        <span class="mono">${roi>=0?'+':''}${roi.toFixed(1)}%</span></div>
+      <button data-p="${p.id}">청산</button></div>`;
+  }).join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>close(b.dataset.p));
+}
+function renderNews(){
+  const el=document.getElementById('newsList');
+  const list=S.news.filter(n=>!S.sel||S.sel.index||n.cid===S.sel.id||n.cid==='*').slice(0,40);
+  if(!list.length){ el.innerHTML='<div class="empty">아직 소식이 없습니다</div>'; return; }
+  el.innerHTML=list.map(n=>{
+    const cls=n.src==='젬민이'?'gem':n.src==='매크로'?'macro':n.src==='뉴스'?'wire':n.src==='공시'?'ann':'ceo';
+    const im=n.impact??0;
+    const co = n.cid==='*' ? null : S.companies.find(c=>c.id===n.cid);
+    const target = n.cid==='*' ? '전 종목' : (co ? co.name : '상장폐지된 기업');
+    const mixF = n.horizon==='short' ? 0.22 : n.horizon==='long' ? 0.78 : 0.50;
+    const reach = co ? tierOf(co)[4] : 0.6;
+    const est = im*(n.confidence??0.7)*mixF*reach*(n.cid==='*'?0.45:1)*100;
+    const life = n.horizon==='short' ? '단기 재료' : n.horizon==='long' ? '장기 재료' : '중기 재료';
+    const effect = n.pending ? ''
+      : `<div class="eff">${esc(target)} · ${life} ·
+          기업가치 <b class="${est>=0?'up':'dn'}">${est>=0?'+':''}${est.toFixed(1)}%</b>
+          <span style="opacity:.6">· 심리 충격은 별도로 단기간 더 크게 움직입니다</span></div>`;
+    const score = n.pending
+      ? `<span class="imp mono" style="color:var(--gem)">판정중…</span>`
+      : `<span class="imp mono ${im>=0?'up':'dn'}">${im>=0?'+':''}${(im*100).toFixed(0)}</span>`;
+    return `<div class="news ${n.fresh?'gemhit':''}">
+      <div class="meta"><span class="src ${cls}">${n.src}</span><span>${n.by||''}</span>${score}</div>
+      <h4>${esc(n.title)}</h4>${effect}<p>${esc(n.body).slice(0,220)}</p></div>`;
+  }).join('');
+  S.news.forEach(n=>n.fresh=false);
+}
+const esc=s=>String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+/* ═══════════════════════════════════════════════════════
+   7. 모달
+   ═══════════════════════════════════════════════════════ */
+const veil=document.getElementById('veil'), modal=document.getElementById('modal');
+const shut=()=>veil.classList.remove('on');
+veil.onclick=e=>{ if(e.target===veil) shut(); };
+
+function openModal(title, bodyHTML, onOk, okLabel='확인'){
+  modal.innerHTML=`<header>${title}<span id="xx">✕</span></header>
+    <div class="body">${bodyHTML}</div>
+    <footer><button class="btn ghost" id="no">취소</button><button class="btn go" id="yes">${okLabel}</button></footer>`;
+  modal._pickedImg = null;
+  veil.classList.add('on');
+  modal.querySelector('#xx').onclick=shut;
+  modal.querySelector('#no').onclick=shut;
+  modal.querySelector('#yes').onclick=()=>{ if(onOk()!==false) shut(); };
+}
+
+document.getElementById('newCo').onclick=()=>{
+  if(!S.me.admin) return toast('관리자만 기업을 만들 수 있습니다');
+  openModal('기업 상장', `
+    <div class="fld"><label>기업명</label><input id="f_name" placeholder="예: 라김전자"></div>
+    <div class="fld"><label>티커</label><input id="f_tick" placeholder="RGE" maxlength="5"></div>
+    <div class="fld"><label>로고 이미지</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div id="f_prev" style="width:52px;height:52px;border-radius:4px;background:var(--rule);
+             flex:0 0 52px;display:grid;place-items:center;font-size:9px;color:var(--ink-dim);
+             background-size:cover;background-position:center">없음</div>
+        <div style="flex:1">
+          <input id="f_file" type="file" accept="image/*"
+                 style="width:100%;font-size:11px;padding:5px;border:1px dashed var(--rule)">
+          <div style="font-size:10px;color:var(--ink-dim);margin-top:4px">
+            128×128 로 자동 축소됩니다. 링크를 쓰려면 아래에 입력하세요.</div>
         </div>
-      </div>
-      <div class="modal-buttons">
-        <button type="button" class="btn btn-ghost" id="newsCancel">취소</button>
-        <button type="submit" class="btn btn-publish">발행</button>
-      </div>
-    </form>
-  </div>
-</div>
+      </div></div>
+    <div class="fld"><input id="f_img" placeholder="또는 이미지 주소 https://..."></div>
+    <div class="fld"><label>기업 설명</label><textarea id="f_desc" placeholder="무엇을 하는 회사인지"></textarea></div>
+    <div class="fld"><label>국적 (IP 자동 감지 · 수정 가능)</label><input id="f_ctry" value="${S.geo||'KR'}" maxlength="2"></div>
+    <div class="fld"><label>시초가 / 발행주식수</label>
+      <div style="display:flex;gap:8px"><input id="f_price" class="mono" type="number" value="50000" style="flex:1">
+      <input id="f_shares" class="mono" type="number" value="1000000" style="flex:1"></div></div>`,
+  ()=>{
+    const name=modal.querySelector('#f_name').value.trim();
+    if(!name){ toast('기업명을 입력하세요'); return false; }
+    const co=makeCompany({
+      name, ticker:modal.querySelector('#f_tick').value.trim(),
+      img: (modal._pickedImg && modal._pickedImg()) || modal.querySelector('#f_img').value.trim(),
+      desc:modal.querySelector('#f_desc').value.trim(),
+      country:modal.querySelector('#f_ctry').value.trim().toUpperCase(),
+      price:+modal.querySelector('#f_price').value,
+      shares:+modal.querySelector('#f_shares').value
+    });
+    S.companies.push(co); persist(); renderCos(); select(co.id);
+    if(window.FB&&FB.on) FB.addCompany(co);
+    toast(`${name} 상장 완료`);
+  },'상장하기');
 
-<!-- 모달: 관리자 -->
-<div class="modal-backdrop" id="adminModalBackdrop">
-  <div class="modal" role="dialog" aria-modal="true">
-    <h3>관리자 패널</h3>
-    <p class="admin-note">이 사이트는 로그인이 없어 접속한 누구나 관리자입니다. 아래에서 시장을 직접 운영해보세요.</p>
-    <div class="admin-actions">
-      <button type="button" class="btn btn-ghost" id="adminNewCompany">+ 신규 기업 등록</button>
-      <button type="button" class="btn btn-ghost" id="adminNewNews">+ 뉴스 속보 발행</button>
-      <button type="button" class="btn btn-ghost" id="adminEditCompany">현재 종목 정보 수정</button>
-      <button type="button" class="btn btn-ghost btn-danger" id="adminReset">시장 전체 초기화</button>
-    </div>
-    <div class="modal-buttons">
-      <button type="button" class="btn btn-ghost" id="adminCancel">닫기</button>
-    </div>
-  </div>
-</div>
+  let picked = '';
+  const prev = modal.querySelector('#f_prev');
+  modal.querySelector('#f_file').onchange = async e => {
+    const f = e.target.files[0]; if(!f) return;
+    try{
+      picked = await shrinkImage(f);
+      prev.style.backgroundImage = `url(${picked})`;
+      prev.textContent = '';
+      modal.querySelector('#f_img').value = '';
+      modal.querySelector('#f_img').placeholder = '파일을 선택했습니다';
+    }catch(err){ toast(err.message); }
+  };
+  modal._pickedImg = () => picked;
+};
 
-<footer class="site-footer">
-  <span>가상의 시뮬레이션입니다. 모든 기업·시세·뉴스는 실제와 무관합니다.</span>
-  <button class="btn-link" id="btnReset">전체 초기화</button>
-</footer>
+/* 기업 수정. 소유주 또는 관리자만.
+   발행주식수·가격은 열지 않는다 — 돌아가는 시뮬레이션의 기준값이라
+   중간에 바꾸면 가격이 튀거나 폭주한다. */
+document.getElementById('editCo').onclick=()=>{
+  const co=S.sel; if(!co) return;
+  const myId = (window.FB && FB.on) ? FB.uid : S.me.id;
+  const canEdit = co.owner===myId || S.me.admin;
+  if(!canEdit) return toast('이 기업의 소유주만 수정할 수 있습니다');
 
-<script src="script.js"></script>
+  openModal(`기업 수정 — ${esc(co.name)}`, `
+    <div class="fld"><label>기업명</label><input id="e_name" value="${esc(co.name)}"></div>
+    <div class="fld"><label>티커</label><input id="e_tick" value="${esc(co.ticker)}" maxlength="5"></div>
+    <div class="fld"><label>로고 이미지</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div id="e_prev" style="width:52px;height:52px;border-radius:4px;background:var(--rule);
+             flex:0 0 52px;display:grid;place-items:center;font-size:9px;color:var(--ink-dim);
+             background-size:cover;background-position:center;
+             ${co.img?`background-image:url(${co.img})`:''}">${co.img?'':'없음'}</div>
+        <input id="e_file" type="file" accept="image/*"
+               style="flex:1;font-size:11px;padding:5px;border:1px dashed var(--rule)"></div></div>
+    <div class="fld"><label>기업 설명</label><textarea id="e_desc">${esc(co.desc)}</textarea></div>
+    <div class="fld"><label>국적</label><input id="e_ctry" value="${esc(co.country)}" maxlength="2"></div>
+    <p style="font-size:11px;color:var(--ink-dim);line-height:1.7">
+      발행주식수와 주가는 수정할 수 없습니다. 시뮬레이션이 돌아가는 중에
+      바꾸면 가격이 튑니다. 바꿔야 하면 삭제 후 다시 상장하세요.</p>
+    <hr style="border:none;border-top:1px solid var(--rule)">
+    <button class="btn ghost" id="e_del" style="width:100%;border-color:var(--rise);color:var(--rise)">
+      이 기업 상장폐지</button>
+    <div style="font-size:10px;color:var(--ink-dim);line-height:1.6">
+      기업과 함께 관련 소식통 기사, 모든 사람의 해당 종목 포지션이 사라집니다.
+      되돌릴 수 없습니다.</div>`,
+  ()=>{
+    const nm=modal.querySelector('#e_name').value.trim();
+    if(!nm){ toast('기업명을 입력하세요'); return false; }
+    co.name    = nm;
+    co.ticker  = (modal.querySelector('#e_tick').value.trim()||co.ticker).toUpperCase();
+    co.desc    = modal.querySelector('#e_desc').value.trim();
+    co.country = modal.querySelector('#e_ctry').value.trim().toUpperCase()||co.country;
+    if(modal._pickedImg && modal._pickedImg()) co.img = modal._pickedImg();
+    if(window.FB && FB.on) FB.editCompany(co);
+    persist(); renderCos(); renderHead(); toast('수정했습니다');
+  },'저장');
+
+  let picked='';
+  const prev=modal.querySelector('#e_prev');
+  modal.querySelector('#e_file').onchange = async e => {
+    const f=e.target.files[0]; if(!f) return;
+    try{
+      picked = await shrinkImage(f);
+      prev.style.backgroundImage=`url(${picked})`; prev.textContent='';
+    }catch(err){ toast(err.message); }
+  };
+  modal._pickedImg = () => picked;
+
+  modal.querySelector('#e_del').onclick = e => {
+    e.preventDefault();
+    /* confirm 한 번으로 기업과 기사가 통째로 날아가는 건 너무 위험하다.
+       티커를 직접 치게 해서 손이 미끄러진 경우를 걸러낸다. */
+    const typed = prompt(
+      `'${co.name}' 을(를) 상장폐지합니다.\n` +
+      `기업, 관련 기사 ${S.news.filter(n=>n.cid===co.id).length}건, 모든 사람의 포지션이 사라집니다.\n` +
+      `되돌릴 수 없습니다.\n\n진행하려면 티커 "${co.ticker}" 를 입력하세요.`);
+    if(typed === null) return;
+    if(typed.trim().toUpperCase() !== co.ticker.toUpperCase())
+      return toast('티커가 일치하지 않습니다. 취소되었습니다');
+    backup();                       // 지우기 직전 스냅샷
+    delistCompany(co.id); shut();
+  };
+};
+
+/* 상장폐지. 기업만 지우면 뉴스와 포지션이 유령 참조로 남아
+   평가손익 계산이 깨진다. 함께 정리한다. */
+/* 삭제 직전 스냅샷을 로컬에 남긴다. Firestore 문서는 되살릴 수 없지만
+   기업 정의와 기사 본문은 여기서 복구해 다시 올릴 수 있다. */
+function backup(){
+  try{
+    localStorage.setItem('sosik_backup', JSON.stringify({
+      at: Date.now(),
+      companies: S.companies.map(c => ({...c, candles:[], cur:null})),
+      news: S.news
+    }));
+  }catch(e){ console.warn('backup', e.message); }
+}
+
+function restoreBackup(){
+  const raw = localStorage.getItem('sosik_backup');
+  if(!raw) return toast('백업이 없습니다');
+  let b; try{ b = JSON.parse(raw); }catch(e){ return toast('백업이 손상되었습니다'); }
+  const when = new Date(b.at).toLocaleString();
+  if(!confirm(`${when} 시점의 백업입니다.\n기업 ${b.companies.length}개, 기사 ${b.news.length}건을 되살립니다.\n진행할까요?`)) return;
+
+  let n=0;
+  b.companies.forEach(c => {
+    if(S.companies.some(x => x.id===c.id)) return;
+    const co = {...c, candles:[], cur:null, tick:0, sent:ARCH.map(()=>0), mom:0};
+    seed(co, 140);
+    S.companies.push(co);
+    if(window.FB && FB.on) FB.addCompany(co);
+    n++;
+  });
+  b.news.forEach(x => {
+    if(S.news.some(y => y.id===x.id)) return;
+    S.news.push({...x, fired:true});
+    if(window.FB && FB.on) FB.addNews(x);
+  });
+  persist(); renderCos(); renderNews();
+  toast(`기업 ${n}개를 복구했습니다`);
+}
+
+function delistCompany(cid){
+  const co0 = S.companies.find(c=>c.id===cid);
+  const bd  = co0 ? boardOf(co0) : 'NONEX';
+  const idxBefore = INDICES[bd].value();   // 폐지 전 해당 시장 지수
+  const co = S.companies.find(c=>c.id===cid);
+  const name = co ? co.name : '';
+
+  // 내 포지션은 현재가로 청산해서 돌려준다
+  S.positions.filter(p=>p.cid===cid).forEach(p=>{
+    S.me.cash += p.margin + pnlOf(p, co);
+  });
+  S.positions = S.positions.filter(p=>p.cid!==cid);
+
+  S.companies = S.companies.filter(c=>c.id!==cid);
+  INDICES[bd].rebase(idxBefore);        // 폐지로 시총이 줄어도 지수는 그대로
+  S.news      = S.news.filter(n=>n.cid!==cid);
+  delete S.draws[cid];
+  Sim.hold.delete(cid);
+
+  if(S.sel && S.sel.id===cid) S.sel = S.companies[0] || null;
+
+  if(window.FB && FB.on) FB.delistCompany(cid);
+  persist();
+  if(window.FB && FB.on) FB.saveMe();
+  renderCos(); renderNews(); renderPos(); renderWallet();
+  if(S.sel){ renderHead(); fit(); paint(); }
+  toast(`${name} 상장폐지 완료`);
+}
+
+const WIRE_COOL = 150*1000;       // 같은 사람이 2분 30초에 한 번만
+
+document.getElementById('newWire').onclick=()=>{
+  const left = WIRE_COOL - (Date.now() - (S.me.lastWire||0));
+  if(left > 0) return toast(`${Math.ceil(left/1000)}초 뒤에 다시 쓸 수 있습니다`);
+
+  openModal('뉴스 작성', `
+    <div class="fld"><label>제목</label><input id="w_t" placeholder="예: 기준금리 0.25%p 인상"></div>
+    <div class="fld"><label>내용</label><textarea id="w_b" placeholder="시장 전체에 영향을 주는 소식"></textarea></div>
+    <p style="font-size:11px;color:var(--ink-dim);line-height:1.7">
+      특정 기업이 아니라 <b>상장된 모든 종목</b>에 영향을 줍니다.
+      대신 개별 기업 기사보다 반영 강도는 약합니다.
+      작성자 이름이 함께 남고, 젬민이의 검증 대상이 됩니다.
+      2분 30초에 한 번만 쓸 수 있습니다.</p>`,
+  ()=>{
+    const t=modal.querySelector('#w_t').value.trim();
+    const b=modal.querySelector('#w_b').value.trim();
+    if(!t){ toast('제목을 입력하세요'); return false; }
+    S.me.lastWire = Date.now();
+    post({cid:'*', src:'뉴스', by:S.me.name, title:t, body:b});
+  },'내보내기');
+};
+
+document.getElementById('newPost').onclick=()=>{
+  const co=S.sel; if(!co) return toast('기업을 먼저 고르세요');
+  if(co.owner!==S.me.id) return toast('이 기업의 CEO만 기고할 수 있습니다');
+  openModal(`소식통 기고 — ${co.name}`, `
+    <div class="fld"><label>제목</label><input id="p_t" placeholder="제목"></div>
+    <div class="fld"><label>내용</label><textarea id="p_b" placeholder="내용"></textarea></div>
+    <p style="font-size:11px;color:var(--ink-dim);line-height:1.7">
+      기고 즉시 시장에 반영됩니다. 다만 젬민이가 국가 소식·환율과 대조해
+      과장을 찾아내면 반박 기사를 올립니다.</p>`,
+  ()=>{
+    const t=modal.querySelector('#p_t').value.trim();
+    const b=modal.querySelector('#p_b').value.trim();
+    if(!t) { toast('제목을 입력하세요'); return false; }
+    // impact 를 넘기지 않는다. 비워두면 Gemini 대기열로 들어가고,
+    // 키가 없을 때만 post() 안에서 로컬 채점으로 떨어진다.
+    post({cid:co.id, src:'CEO', by:S.me.name, title:t, body:b});
+  },'기고하기');
+};
+
+document.getElementById('adminBtn').onclick=()=>{
+  const linked = window.FB && FB.on;
+  const myId   = linked ? FB.uid : S.me.id;
+
+  // 내가 소유한 기업만 넘길 수 있다
+  const mine = S.companies.filter(c => c.owner === myId);
+  const coOpts = mine.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')
+    || '<option value="">넘길 기업이 없습니다</option>';
+
+  // 접속한 적 있는 사람 명부에서 고른다
+  const others = (S.users||[]).filter(u => u.id !== myId);
+  const usrOpts = others.map(u=>`<option value="${u.id}">${esc(u.name)} · ${u.id.slice(0,6)}</option>`).join('')
+    || '<option value="">아직 다른 접속자가 없습니다</option>';
+
+  openModal('관리자', `
+    <div class="fld"><label>내 표시 이름</label><input id="a_nm" value="${esc(S.me.name)}"></div>
+
+    <p style="font-size:10px;color:${S.me.admin?'var(--ink-dim)':'var(--amber)'}">
+      명단 등록 ${(window.ADMIN_UIDS||[]).includes(myId)?'O':'X'} ·
+      명단 ${(window.ADMIN_UIDS||[]).length}명 ·
+      판정 ${S.me.admin?'관리자':'일반'}</p>
+    <p style="font-size:10px;color:var(--ink-dim)">빌드 ${BUILD} ·
+      ${linked ? (FB.guest?'시세 수신 중':'이 창이 호스트') : '로컬 모드 (Firebase 미연결)'}</p>
+    <div class="fld"><label>내 ID ${S.me.admin?'· 관리자':'· 일반 사용자'}</label>
+      <div style="display:flex;gap:6px">
+        <input id="a_id" class="mono" value="${myId}" readonly style="flex:1;color:var(--ink-dim)">
+        <button class="btn ghost" id="a_cp" style="padding:6px 12px">복사</button></div></div>
+
+    ${S.me.admin ? '' : `<p style="font-size:11px;color:var(--amber);line-height:1.7">
+      관리자가 아닙니다. 기업을 상장하려면 Firebase 콘솔의
+      <b>world/config</b> 문서 <b>admins</b> 배열에 위 ID를 넣으세요.</p>`}
+
+    <hr style="border:none;border-top:1px solid var(--rule)">
+
+    <div class="fld"><label>장 운영 — ${OPEN_H}시 개장 · ${CLOSE_H}시 마감</label>
+      <div style="display:flex;gap:6px">
+        <button class="btn ghost" id="m_op" style="flex:1">비상 개장</button>
+        <button class="btn ghost" id="m_cl" style="flex:1">비상 마감</button>
+        <button class="btn ghost" id="m_rs" style="flex:1">해제</button></div>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px;line-height:1.6">
+        현재 <b>${MK.open()?'장중':'마감'}</b>${MK.forced()?' (비상 조작 중)':''} ·
+        ${new Date(MK.nextEdge()).getHours()}시에 자동 전환.
+        비상 조작은 다음 정규 시각까지만 유지되며 스케줄은 그대로 돌아갑니다.</div></div>
+
+    <hr style="border:none;border-top:1px solid var(--rule)">
+
+    <div class="fld"><label>기준금리 — 현재 ${RATE.v.toFixed(2)}%</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="a_rate" type="number" step="0.25" min="0" max="20" value="${RATE.v}"
+               style="flex:1">
+        <button class="btn ghost" id="a_rateSet" style="padding:6px 12px">적용</button></div>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px;line-height:1.6">
+        중립 2.5%. 올리면 적정가가 눌리고 매수 문턱이 높아져 시장이 식습니다.
+        내리면 반대로 돈이 풀린 장세가 됩니다.</div></div>
+
+    <hr style="border:none;border-top:1px solid var(--rule)">
+
+    <div class="fld"><label>상장 기준</label>
+      <div style="font-size:10px;color:var(--ink-dim);line-height:1.8">
+        <b style="color:var(--ink)">NOSPI 정규시장</b> — 시총 3,000억 이상 · 주가 3,000원 이상<br>
+        <b style="color:var(--ink)">NOSDAQ 코스닥</b> — 시총 800억 이상 · 주가 1,000원 이상<br>
+        <b style="color:var(--ink)">NONEX 성장시장</b> — 시총 200억 이상 · 주가 500원 이상<br>
+        <b style="color:var(--fall)">상장폐지</b> — 시총 40억 미만 또는 주가 100원 미만<br>
+        신규 상장은 NONEX 에서 시작합니다. 세션마다 심사하며,
+        미달이 ${GRACE}회 이어지면 강등 또는 폐지됩니다.</div></div>
+
+    <hr style="border:none;border-top:1px solid var(--rule)">
+
+    <div class="fld"><label>호스트</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="mono" style="flex:1;color:var(--ink-dim)">
+          현재 ${(window.FB&&FB.on)?(FB.guest?'다른 창이 호스트 (수신 중)':'이 창이 호스트'):'로컬 단독'}</span>
+        <button class="btn ghost" id="a_host" style="padding:6px 12px">가져오기</button></div>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px;line-height:1.6">
+        Gemini 는 관리자이면서 호스트인 창에서만 호출됩니다.
+        수신 중이면 AI 판정과 젬민이가 멈춥니다.</div></div>
+
+    <hr style="border:none;border-top:1px solid var(--rule)">
+
+    <div class="fld"><label>백업</label>
+      <button class="btn ghost" id="a_bk" style="width:100%">마지막 백업에서 복구</button>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px;line-height:1.6">
+        상장폐지 직전 자동으로 남긴 스냅샷에서 기업과 기사를 되살립니다.
+        차트 이력은 복구되지 않고 새로 생성됩니다.</div></div>
+
+    <hr style="border:none;border-top:1px solid var(--rule)">
+
+    <div class="fld"><label>지갑</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="mono" style="flex:1;color:var(--ink-dim)">${won(S.me.cash)}</span>
+        <button class="btn ghost" id="a_rst" style="padding:6px 12px">초기화</button></div>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px">
+        1천만원으로 되돌리고 보유 포지션을 모두 지웁니다.</div></div>
+
+    <hr style="border:none;border-top:1px solid var(--rule)">
+
+    <div class="fld"><label>넘길 기업 (내가 소유한 것만)</label>
+      <select id="a_co">${coOpts}</select></div>
+    <div class="fld"><label>넘겨받을 사람</label>
+      <select id="a_to"><option value="">— 이전하지 않음 —</option>${usrOpts}</select></div>
+    <p style="font-size:11px;color:var(--ink-dim);line-height:1.7">
+      명부에는 이 사이트에 한 번이라도 접속한 사람이 뜹니다.
+      친구가 안 보이면 먼저 접속해서 이름을 저장하라고 하세요.
+      소유권을 넘기면 그 사람이 CEO가 되어 소식통에 기고할 수 있습니다.</p>`,
+  ()=>{
+    const nm = modal.querySelector('#a_nm').value.trim() || '투자자';
+    if(nm !== S.me.name){
+      S.me.name = nm;
+      if(linked) FB.setMyName(nm);
+    }
+    const cid = modal.querySelector('#a_co').value;
+    const toId = modal.querySelector('#a_to').value;
+    if(cid && toId){
+      const co = S.companies.find(c=>c.id===cid);
+      const u  = others.find(x=>x.id===toId);
+      if(co && u){
+        co.owner = u.id; co.ownerName = u.name;
+        if(linked) FB.setOwner(co.id, u.id, u.name)
+          .then(()=>toast(`${co.name} 소유권 → ${u.name}`))
+          .catch(()=>toast('이전 실패 — 소유주만 넘길 수 있습니다'));
+        else toast(`${co.name} 소유권 → ${u.name}`);
+      }
+    }
+    persist(); renderCos();
+  },'저장');
+
+  modal.querySelector('#a_rateSet').onclick = e => {
+    e.preventDefault();
+    if(!S.me.admin) return toast('관리자만 조작할 수 있습니다');
+    RATE.set(modal.querySelector('#a_rate').value);
+    toast(`기준금리 ${RATE.v.toFixed(2)}% 적용`);
+    shut();
+  };
+
+  modal.querySelector('#a_host').onclick = e => {
+    e.preventDefault();
+    if(!(window.FB && FB.on)) return toast('로컬 단독 실행 중입니다');
+    FB.want = true;
+    toast('다음 갱신에 호스트를 넘겨받습니다');
+    shut();
+  };
+
+  modal.querySelector('#a_bk').onclick = e => { e.preventDefault(); restoreBackup(); shut(); };
+
+  const mk = (mode) => e => {
+    e.preventDefault();
+    if(!S.me.admin) return toast('관리자만 조작할 수 있습니다');
+    MK.force(mode);
+    toast(mode ? (mode==='open'?'비상 개장했습니다':'비상 마감했습니다') : '정규 스케줄로 복귀했습니다');
+    shut();
+  };
+  modal.querySelector('#m_op').onclick = mk('open');
+  modal.querySelector('#m_cl').onclick = mk('close');
+  modal.querySelector('#m_rs').onclick = mk(null);
+
+  modal.querySelector('#a_rst').onclick = e => {
+    e.preventDefault();
+    S.me.cash = 10_000_000; S.positions = [];
+    persist(); if(linked) FB.saveMe();
+    renderWallet(); renderPos(); toast('지갑을 초기화했습니다'); shut();
+  };
+  modal.querySelector('#a_cp').onclick = e => {
+    e.preventDefault();
+    navigator.clipboard.writeText(myId).then(()=>toast('ID를 복사했습니다'));
+  };
+};
+
+/* 뉴스 등록.
+   Gemini가 켜져 있으면 impact를 비워두고 대기열에 넣는다 —
+   판정이 오기 전까지 주가는 안 움직인다. 꺼져 있으면 로컬 채점. */
+function post({cid,src,by,title,body,impact,horizon,confidence,volatility}){
+  /* 판정을 기다릴지는 '글쓴 사람'이 아니라 '호스트'가 정해야 한다.
+     예전에는 작성자 브라우저의 Gem.ready() 로 판단해서, Gemini 키가 없는
+     친구가 쓰면 그 자리에서 로컬 채점으로 확정돼 pending 이 꺼졌다.
+     그러면 호스트의 Gemini 는 그 기사를 아예 보지 못하고,
+     젬민이도 반박할 기회가 없었다. 서버 모드면 무조건 판정을 기다린다.
+     호스트가 2분 안에 채점하지 못하면 폴백이 로컬 점수로 확정한다. */
+  const server = !!(window.FB && FB.on);
+  const wait = (impact===undefined||impact===null)
+             && (server || (window.Gem && Gem.ready()));
+  const n={
+    id:uid(), cid, src, by, title, body, ts:Date.now(), fresh:true,
+    horizon:horizon||'mid', confidence:confidence??0.7, volatility:volatility||1,
+    impact: wait ? null : (impact ?? localScore(title+' '+body)),
+    pending: wait
+  };
+  S.news.unshift(n);
+  if(S.news.length>200) S.news.pop();
+  if(!wait) fire(n);
+  if(window.FB&&FB.on) FB.addNews(n);
+  persist(); renderNews();
+}
+window.pushNews = post;
+
+function fire(n){
+  // 예전 빌드가 매크로 기사에 특정 기업을 붙여놓은 경우가 있다. 되돌린다.
+  if(n.src === '매크로' && n.cid !== '*') n.cid = '*';
+  if(!isEngine()) return;              // 게스트는 시세를 만들지 않는다
+  if(n.fired) return;                  // 같은 뉴스를 두 번 반영하지 않는다
+  if(!MK.open()){ n.held = true; return; }   // 마감 중 — 개장 시가에 한꺼번에 터진다
+  n.fired = true;
+  const v={impact:n.impact,horizon:n.horizon,
+           confidence:n.confidence,volatility:n.volatility};
+
+  if(n.cid==='*'){
+    /* 시장 전체 뉴스. 개별 기업 뉴스보다 약하게 먹인다 —
+       한 사람이 전 종목을 동시에 흔들 수 있는 글이라,
+       같은 세기로 주면 이게 유일한 무기가 된다. */
+    S.companies.forEach(co => applyNews(co, {...v, confidence:(v.confidence??.7)*0.45}));
+    return;
+  }
+  const co=S.companies.find(c=>c.id===n.cid);
+  if(co){
+    applyNews(co, v);
+    const pct = Math.round((n.impact||0)*100);
+    toast(`${co.name} — 재료 반영 ${pct>=0?'+':''}${pct}`);
+  }
+}
+
+/* Gemini 판정이 도착하면 여기로 들어온다 */
+window.applyScore = function(id, v){
+  const n=S.news.find(x=>x.id===id);
+  if(!n || !n.pending) return;
+  /* 대상 기업 재지정. '+뉴스' 로 쓴 기사는 일단 전 종목(*)으로 들어오지만,
+     특정 기업 얘기면 그 기업으로 옮겨야 한다. 전쟁·금리처럼 정말 시장
+     전체를 흔드는 내용만 * 로 남는다. */
+  if(v.cid && v.cid !== n.cid && n.src==='뉴스'){
+    const ok = v.cid === '*'
+      || (S.companies.some(c=>c.id===v.cid) && mentioned(n, v.ment));
+    if(ok) n.cid = v.cid;
+  }
+  n.impact     = clamp(v.impact ?? 0, -1, 1);
+  n.horizon    = v.horizon || n.horizon;
+  n.confidence = v.confidence ?? n.confidence;
+  n.volatility = v.volatility ?? 1;
+  n.pending    = false; n.fresh = true;
+  fire(n); persist(); renderNews();
+  if(window.FB&&FB.on) FB.patchNews(id, {impact:n.impact, horizon:n.horizon,
+    confidence:n.confidence, volatility:n.volatility, pending:false, cid:n.cid});
+};
+
+/* Gemini 가 고른 기업이 기사에 실제로 등장하는지 확인한다.
+   확인이 없으면 '정부 규제' 같은 기사에까지 아무 기업이나 붙는다.
+   ment 는 기사에 나온 표기 그대로라서, 한국어↔영어가 달라도
+   기사 본문과 대조하면 검증이 된다. */
+function mentioned(n, ment){
+  if(!ment || typeof ment !== 'string') return false;
+  const norm = x => (x||'').toLowerCase().replace(/[㈜()（）.,'"·\-\s]/g,'');
+  const key = norm(ment);
+  if(key.length < 2) return false;
+  return norm(n.title + ' ' + n.body).includes(key);
+}
+
+/* Gemini 가 못 붙었을 때의 대상 기업 추정.
+   표기 정규화 후 이름·티커가 본문에 있는지만 본다.
+   한국어↔영어 대응은 Gemini 몫이고 여기서는 못 한다. */
+function guessTarget(txt){
+  const norm = x => (x||'').toLowerCase()
+    .replace(/[㈜()（）.,'"·\-\s]/g,'')
+    .replace(/주식회사|inc|corp|co|ltd|그룹|holdings/g,'');
+  /* '라김기업' 을 통째로 찾으면 '㈜라김' 을 못 잡는다.
+     흔한 접미사를 떼어낸 핵심어로도 맞춰본다. */
+  const core = x => x.replace(/(기업|그룹|테크|전자|산업|엔지니어링|시스템|네트웍스|파트너스)$/,'');
+  const t = norm(txt);
+  let best = null, len = 0;
+  const hit = (key, id) => {
+    if(key && key.length >= 2 && t.includes(key) && key.length > len){ best=id; len=key.length; }
+  };
+  S.companies.forEach(c=>{
+    const nm = norm(c.name);
+    hit(nm, c.id); hit(core(nm), c.id); hit(norm(c.ticker), c.id);
+  });
+  return best;
+}
+
+/* Gemini 없을 때 쓰는 임시 감성 점수 (워커 붙이면 대체됨) */
+function localScore(txt){
+  const pos=['성장','흑자','수주','신제품','최대','돌파','호조','계약','특허','상승','확대','인수'];
+  const neg=['손실','적자','리콜','소송','하락','부진','철수','지연','규제','감원','파업','조사'];
+  let s=0; pos.forEach(w=>{ if(txt.includes(w)) s+=0.22; });
+  neg.forEach(w=>{ if(txt.includes(w)) s-=0.26; });
+  return clamp(s,-1,1);
+}
+
+/* ═══════════════════════════════════════════════════════
+   8. 도구 · 루프
+   ═══════════════════════════════════════════════════════ */
+document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-tool]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); S.tool=b.dataset.tool;
+  dv.style.cursor = S.tool==='cursor'?'default':'crosshair';
+});
+document.getElementById('clearDraw').onclick=()=>{
+  if(S.sel){ S.draws[S.sel.id]=[]; persist(); paintDraw(); toast('드로잉 삭제'); }
+};
+document.getElementById('goLong').onclick=()=>open('long');
+document.getElementById('goShort').onclick=()=>open('short');
+
+document.getElementById('gemBtn').onclick=()=>{
+  if(!S.me.admin) return toast('Gemini 설정은 관리자만 할 수 있습니다');
+  Gem.panel();
+};
+window.renderGemBadge=()=>{
+  const on=window.Gem&&Gem.ready(), d=document.getElementById('gemDot');
+  d.textContent = on?'●':'○';
+  d.style.color = on?'var(--gem)':'var(--ink-dim)';
+  document.getElementById('gemBtn').title =
+    on?`활성 · 이번 세션 ${Gem.calls}콜`:'키 미설정 — 로컬 채점으로 동작 중';
+};
+
+// IP → 국적 (기업 생성 기본값)
+S.geo='KR';
+fetch('https://ipapi.co/json/').then(r=>r.json())
+  .then(j=>{ if(j&&j.country_code) S.geo=j.country_code; }).catch(()=>{});
+
+document.getElementById('pop').textContent=POP.toLocaleString();
+
+/* Gemini 가 쿼터·오류로 응답하지 못하면 판정중 상태가 영원히 남는다.
+   2분이 지나면 로컬 채점으로 확정해서 뉴스가 갇히지 않게 한다. */
+setInterval(()=>{
+  if(!isEngine()) return;              // 여러 창이 각자 채점하면 값이 엇갈린다
+  const now=Date.now(); let hit=false;
+  S.news.forEach(n=>{
+    if(n.pending && now - n.ts > 60000){
+      const guess = (n.src==='뉴스') ? guessTarget(n.title+' '+n.body) : null;
+      window.applyScore(n.id, { impact: localScore(n.title+' '+n.body),
+                                cid: guess || n.cid });
+      hit=true;
+    }
+  });
+  if(hit) toast('AI 판정이 지연되어 임시 점수로 반영했습니다');
+}, 8000);
+
+let saveT=0;
+setInterval(()=>{
+  if(!window.FB || !FB.on || !FB.guest){ if(MK.open()) MOOD.step(); S.companies.forEach(tick); }
+  /* 환율. 예전에는 난수를 그냥 더하기만 해서 제동이 없었고,
+     오래 켜두면 1,380 이 19 원까지 흘러내렸다. 기준값으로 되돌아오게 한다. */
+  S.fx += (FX_BASE - S.fx)*0.002 + gauss()*0.6;
+  S.fx = clamp(S.fx, FX_BASE*0.75, FX_BASE*1.35);
+  document.getElementById('fx').textContent=S.fx.toFixed(1);
+  const s=((Date.now()-S.t0)/1000)|0;
+  document.getElementById('clock').textContent=`${String((s/60|0)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  if(S.sel){ renderHead(); paint(); }
+  MK.sync();
+  if(MK.open()){ NOSPI.step(); NONEX.step(); }
+  if(reviewDue){ reviewDue = false; review(); }
+  renderNospi();
+  checkLiq();
+  renderCos(); renderWallet(); renderPos();
+  if(++saveT%4===0) renderGemBadge();
+  if(saveT%20===0) persist();
+}, TICK_MS);
+
+/* 초기 부팅 */
+if(!window.FIREBASE_CONFIG) S.me.admin = true;   // 로컬 단독 실행이면 혼자 다 한다
+loadCandles();
+fit(); if(S.companies.length) select(S.companies[0].id); renderWallet(); renderPos();
+</script>
+<script src="gemini.js"></script>
+<script type="module" src="firebase.js"></script>
+<script>renderGemBadge();</script>
 </body>
 </html>
